@@ -1,0 +1,116 @@
+/* ========= 上部ステータスバー ========= */
+.status-bar {
+  background: linear-gradient(180deg, #1e293b, #0f172a);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 10;
+}
+
+.cash-display {
+  background: linear-gradient(180deg, #4ade80, #16a34a);
+  border: 2px solid #14532d;
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-weight: 900;
+  color: #fff;
+  font-size: 16px;
+  box-shadow: 0 3px 0 #14532d, inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.3);
+}
+
+.pop-display {
+  background: linear-gradient(180deg, #60a5fa, #2563eb);
+  border: 2px solid #1e3a8a;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-weight: 900;
+  color: #fff;
+  font-size: 15px;
+  box-shadow: 0 3px 0 #1e3a8a, inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.3);
+}
+
+.title-label {
+  font-family: 'DotGothic16', monospace;
+  font-size: 13px;
+  color: #94a3b8;
+  margin-left: auto;
+  letter-spacing: 1px;
+}
+
+/* ========= ツールバー ========= */
+.tool-bar {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  background: var(--ui-card);
+}
+
+.tool-btn {
+  flex: 1;
+  background: linear-gradient(180deg, #475569, #334155);
+  border: 2px solid #000;
+  border-radius: 10px;
+  padding: 8px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  box-shadow: 0 3px 0 #1e293b, inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  font-family: inherit;
+  color: var(--ui-text);
+  transition: transform 0.05s, box-shadow 0.05s;
+}
+
+.tool-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #1e293b, inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.tool-btn.active {
+  background: linear-gradient(180deg, #f59e0b, #b45309);
+  border-color: #92400e;
+  box-shadow: 0 3px 0 #78350f, inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.tool-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 2px solid #000;
+  flex-shrink: 0;
+}
+
+.tool-icon.road {
+  background:
+    linear-gradient(180deg, transparent 45%, var(--road-line) 45% 55%, transparent 55%),
+    var(--road);
+}
+
+.tool-icon.residential {
+  background:
+    radial-gradient(circle at 50% 70%, rgba(255, 255, 255, 0.5) 0 3px, transparent 3px),
+    var(--residential);
+}
+
+.tool-icon.demolish {
+  background:
+    linear-gradient(135deg, transparent 44%, var(--demolish) 44% 56%, transparent 56%),
+    linear-gradient(45deg, transparent 44%, var(--demolish) 44% 56%, transparent 56%),
+    #fff;
+}
+
+.tool-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.tool-cost {
+  font-size: 10px;
+  opacity: 0.85;
+  font-weight: 700;
+}

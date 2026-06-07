@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>シティ自作</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=M+PLUS+Rounded+1c:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles/base.css">
+<link rel="stylesheet" href="styles/world.css">
+<link rel="stylesheet" href="styles/ui.css">
+</head>
+<body>
+<div id="app">
+  <div class="status-bar">
+    <div class="cash-display" id="cashDisplay">$10,000</div>
+    <div class="pop-display" id="popDisplay">👥 0</div>
+    <div class="title-label">PHASE 1</div>
+  </div>
+  <div class="world" id="world">
+    <canvas id="canvas"></canvas>
+  </div>
+  <div class="tool-bar" id="toolBar">
+    <button class="tool-btn active" data-tool="road">
+      <div class="tool-icon road"></div>
+      <div class="tool-label">道路</div>
+      <div class="tool-cost">$20</div>
+    </button>
+    <button class="tool-btn" data-tool="residential">
+      <div class="tool-icon residential"></div>
+      <div class="tool-label">住宅</div>
+      <div class="tool-cost">$50</div>
+    </button>
+    <button class="tool-btn" data-tool="demolish">
+      <div class="tool-icon demolish"></div>
+      <div class="tool-label">取壊</div>
+      <div class="tool-cost">無料</div>
+    </button>
+  </div>
+</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+:root {
+  --ui-bg: #0f172a;
+  --ui-card: #1e293b;
+  --ui-text: #f1f5f9;
+
+  --grass: #86c46b;
+  --grass-shadow: #6da354;
+  --road: #4a4a4a;
+  --road-line: #fef3c7;
+  --residential: #e76f51;
+  --residential-light: #f4a385;
+  --commercial: #4a90b8;
+  --industrial: #f0c060;
+  --demolish: #ef4444;
+
+  --grid-line: rgba(0, 0, 0, 0.1);
+  --accent: #facc15;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  max-width: 600px;
+  margin: 0 auto;
+  background: var(--ui-bg);
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+}
