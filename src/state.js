@@ -23,7 +23,8 @@ export const state = {
   population: 0,
 
   // ワールド
-  //   grid[y][x] = { type: 'empty'|'road'|'residential', population: number }
+  //   grid[y][x] = { type: 'empty'|'road'|'residential'|'plaza', population: number }
+  //   plaza は装飾タイルでシミュには反応しない
   grid: makeEmptyGrid(CONFIG.GRID.WIDTH, CONFIG.GRID.HEIGHT),
 
   // 現在選択中のツール

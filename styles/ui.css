@@ -96,6 +96,12 @@
     var(--residential);
 }
 
+.tool-icon.plaza {
+  background:
+    radial-gradient(circle at 50% 50%, var(--accent) 0 4px, transparent 5px),
+    linear-gradient(to bottom, #d4d0c5, #b0a89c);
+}
+
 .tool-icon.demolish {
   background:
     linear-gradient(135deg, transparent 44%, var(--demolish) 44% 56%, transparent 56%),
