@@ -52,14 +52,23 @@ function setupInput() {
 
 // =====================================================
 //  ゲームループ
-//   hidden tab で rAF が止まるブラウザ向けに setTimeout フォールバック
+//   rAF と setTimeout を両方仕掛けて先に発火した方が駆動する。
+//   可視タブ: rAF が先 (60fps)。hidden タブ: rAF は止まるので
+//   setTimeout が保険として動き続ける。visibility が切り替わる
+//   瞬間に rAF 待ちで永久停止する事故をこれで防ぐ
 // =====================================================
+let rafId = 0;
+let timeoutId = 0;
+
 function scheduleNextFrame() {
-  if (document.hidden) {
-    setTimeout(() => gameLoop(performance.now()), 100);
-  } else {
-    requestAnimationFrame(gameLoop);
-  }
+  rafId = requestAnimationFrame(tick);
+  timeoutId = setTimeout(tick, 150);
+}
+
+function tick() {
+  cancelAnimationFrame(rafId);
+  clearTimeout(timeoutId);
+  gameLoop(performance.now());
 }
 
 function gameLoop(now) {

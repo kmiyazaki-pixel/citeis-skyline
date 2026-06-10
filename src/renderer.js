@@ -4,6 +4,9 @@
 //   ・タイルは tileViews[y][x] に持って差分更新する
 //   ・geometry/material は共有 (SHARED + MAT_CACHE)
 //   ・窓は scene 全体で 1 つの InstancedMesh
+//   ・影方式: 静的な建物/木のみ castShadow。動くもの
+//     (車・雲・噴水・川・窓) は castShadow=false で統一し、
+//     shadowMap はタイル変化時のみ更新 (tilesDirty)
 // =====================================================
 
 import * as THREE from 'three';
@@ -14,16 +17,33 @@ import { $canvas } from './dom.js';
 
 const W = CONFIG.GRID.WIDTH;
 const H = CONFIG.GRID.HEIGHT;
+const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
 let renderer, scene, camera, controls;
 let groundMesh;
 let windowsMesh;          // InstancedMesh, 全建物の窓を 1 つで描画
+let parkedBody, parkedCabin; // InstancedMesh, 駐車車両
+let riverGeo = null;      // 川のさざ波アニメ用
 let colors = null;
 const tileViews = [];     // tileViews[y][x] = { type, mesh, tree }
 let tilesDirty = true;    // 影マップを更新するかどうか
 
+// アニメーション状態 (すべて renderer 内に閉じる)
+let lastNow = 0;
+let twinkleAt = 0;
+const anim = { plumes: [], clouds: [], t: 0 };
+
+// 走行車
+const cars = [];
+let roadList = [];
+let roadsVersion = 0;
+
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
+const _dummyObj = new THREE.Object3D();
+const _color = new THREE.Color();
+const _litColor = new THREE.Color(CONFIG.VISUAL.PALETTE.WINDOW_LIT);
+const _dimColor = new THREE.Color(CONFIG.VISUAL.PALETTE.WINDOW_DIM);
 
 // 共有ジオメトリ (使い回しで dispose しない)
 const SHARED = {
@@ -31,11 +51,13 @@ const SHARED = {
   plane:  new THREE.PlaneGeometry(1, 1),
   cone4:  new THREE.ConeGeometry(0.62, 0.5, 4),
   cone8:  new THREE.ConeGeometry(0.05, 0.4, 8),
+  pine:   new THREE.ConeGeometry(0.30, 0.9, 7),
   cyl:    new THREE.CylinderGeometry(1, 1, 1, 8),
   sphere: new THREE.SphereGeometry(0.26, 8, 6),
 };
 
 // マテリアルキャッシュ (色ごとに 1 つ)
+//   注意: 共有なので material プロパティをアニメさせない (全インスタンス同期で動く)
 const MAT_CACHE = new Map();
 function mat(hex, opts = {}) {
   const key = hex + ':' + JSON.stringify(opts);
@@ -81,7 +103,7 @@ export function setupCanvas() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = isMobile ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
-  renderer.shadowMap.autoUpdate = false; // 変更時のみ更新
+  renderer.shadowMap.autoUpdate = false; // タイル変化時のみ更新
 
   $canvas.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
@@ -92,7 +114,7 @@ export function setupCanvas() {
   scene.background = new THREE.Color(0xb8e0f0);
   scene.fog = new THREE.Fog(0xb8e0f0, W * 1.6, W * 4);
 
-  camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200);
+  camera = new THREE.PerspectiveCamera(45, 1, 0.1, 250);
   camera.position.set(W * 0.95, H * 0.85, H * 1.2);
 
   controls = new OrbitControls(camera, renderer.domElement);
@@ -133,7 +155,7 @@ export function setupCanvas() {
   scene.add(sun);
   scene.add(sun.target);
 
-  // 地面
+  // 地面 (高低ノイズ + 頂点カラーの色ムラ + フラットシェーディング)
   const groundGeo = new THREE.PlaneGeometry(W, H, W, H);
   const pos = groundGeo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
@@ -141,14 +163,25 @@ export function setupCanvas() {
     pos.setZ(i, (Math.sin(x * 1.7 + y * 0.6) + Math.cos(y * 1.3 - x * 0.4)) * 0.06);
   }
   groundGeo.computeVertexNormals();
-  const groundMat = new THREE.MeshLambertMaterial({ color: colors.grass, flatShading: true });
+  // 草の色ムラ (±10% の明暗)
+  const gcol = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    _color.copy(colors.grass).multiplyScalar(0.90 + hash01(pos.getX(i), pos.getY(i)) * 0.20);
+    gcol[i * 3]     = _color.r;
+    gcol[i * 3 + 1] = _color.g;
+    gcol[i * 3 + 2] = _color.b;
+  }
+  groundGeo.setAttribute('color', new THREE.BufferAttribute(gcol, 3));
+  const groundMat = new THREE.MeshLambertMaterial({
+    color: 0xffffff, vertexColors: true, flatShading: true,
+  });
   groundMesh = new THREE.Mesh(groundGeo, groundMat);
   groundMesh.rotation.x = -Math.PI / 2;
   groundMesh.position.set(W / 2, 0, H / 2);
   groundMesh.receiveShadow = true;
   scene.add(groundMesh);
 
-  // 川 (片側の自動装飾)
+  // 川 (片側の自動装飾、さざ波アニメ付き)
   addRiverEdge();
 
   // グリッド線
@@ -158,8 +191,10 @@ export function setupCanvas() {
   grid.position.set(W / 2, 0.06, H / 2);
   scene.add(grid);
 
-  // 全建物の窓を 1 つの InstancedMesh で
+  // 全建物の窓 / 駐車車両 / 雲
   initWindows();
+  initParkedCars();
+  initClouds();
 
   for (let y = 0; y < H; y++) {
     const row = [];
@@ -188,15 +223,13 @@ function resize() {
 }
 
 // =====================================================
-//  川 (グリッドの上端に流す)
+//  川 (グリッドの上端、頂点を毎フレーム揺らす)
 // =====================================================
 function addRiverEdge() {
   const geo = new THREE.PlaneGeometry(W + 8, 5, 32, 4);
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    pos.setZ(i, Math.sin(pos.getX(i) * 0.6) * 0.04);
-  }
-  geo.computeVertexNormals();
+  // flatShading はシェーダ内で面法線を導出するため computeVertexNormals 不要
+  geo.attributes.position.setUsage(THREE.DynamicDrawUsage);
+  riverGeo = geo;
   const riverMat = new THREE.MeshLambertMaterial({
     color: CONFIG.VISUAL.PALETTE.RIVER, flatShading: true,
   });
@@ -209,7 +242,6 @@ function addRiverEdge() {
 
 // =====================================================
 //  Tier (1〜15) を決定的に算出
-//   中心からの距離が短いほど高層になりやすい
 // =====================================================
 function tileTier(x, y) {
   const cx = W / 2, cy = H / 2;
@@ -227,25 +259,30 @@ function tileTier(x, y) {
 }
 
 // =====================================================
-//  InstancedMesh の窓
+//  InstancedMesh の窓 (またたき対応: instanceColor)
 // =====================================================
-const _dummyObj = new THREE.Object3D();
 function initWindows() {
   const geo = new THREE.BoxGeometry(0.08, 0.10, 0.02);
+  // instanceColor は material.color と乗算されるので白ベースにする
   const winMat = new THREE.MeshLambertMaterial({
-    color: CONFIG.VISUAL.PALETTE.WINDOW_LIT,
-    emissive: 0x442200,
-    emissiveIntensity: 0.4,
+    color: 0xffffff,
+    emissive: 0x221805,
+    emissiveIntensity: 0.3,
   });
   windowsMesh = new THREE.InstancedMesh(geo, winMat, CONFIG.VISUAL.MAX_WINDOWS);
   windowsMesh.count = 0;
   windowsMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  // setColorAt 任せだと count=0 時にゼロサイズの色バッファが確保されてしまうので
+  // 最大容量で明示的に確保しておく
+  windowsMesh.instanceColor = new THREE.InstancedBufferAttribute(
+    new Float32Array(CONFIG.VISUAL.MAX_WINDOWS * 3), 3
+  );
+  windowsMesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
   windowsMesh.castShadow = false;
   windowsMesh.receiveShadow = false;
   scene.add(windowsMesh);
 }
 
-// 全タイルをスキャンして InstancedMesh に窓を流し込む
 function rebuildWindows() {
   let count = 0;
   for (let y = 0; y < H; y++) {
@@ -258,22 +295,18 @@ function rebuildWindows() {
       const halfWall = wall / 2;
       const baseX = x + 0.5;
       const baseZ = y + 0.5;
-      // 階層数だけ縦に配置 (見える 4 面の中央 2 列)
       for (let row = 0; row < tier; row++) {
         const yy = (row + 0.5) * (h / tier);
-        // 4 面: 前 (z+), 後 (z-), 右 (x+), 左 (x-)
         const faces = [
-          [0,  halfWall + 0.012, 0, 1, 0],   // dz +
-          [0, -halfWall - 0.012, 0, 1, Math.PI],
-          [ halfWall + 0.012, 0, 0, 0, Math.PI / 2],
-          [-halfWall - 0.012, 0, 0, 0, -Math.PI / 2],
+          [0,  halfWall + 0.012, 0],
+          [0, -halfWall - 0.012, Math.PI],
+          [ halfWall + 0.012, 0, Math.PI / 2],
+          [-halfWall - 0.012, 0, -Math.PI / 2],
         ];
-        for (const [dx, dz, _ignore, _o, rotY] of faces) {
-          // 2 列 (左右にオフセット)
+        for (const [dx, dz, rotY] of faces) {
           for (const col of [-wall * 0.22, wall * 0.22]) {
             if (count >= CONFIG.VISUAL.MAX_WINDOWS) {
-              windowsMesh.count = count;
-              windowsMesh.instanceMatrix.needsUpdate = true;
+              finishWindows(count);
               return;
             }
             const isXFace = Math.abs(dx) > 0.01;
@@ -281,16 +314,308 @@ function rebuildWindows() {
             const wz = baseZ + dz + (isXFace ? col : 0);
             _dummyObj.position.set(wx, yy, wz);
             _dummyObj.rotation.set(0, rotY, 0);
+            _dummyObj.scale.set(1, 1, 1);
             _dummyObj.updateMatrix();
             windowsMesh.setMatrixAt(count, _dummyObj.matrix);
+            // 初期色: 約 75% が点灯
+            const lit = hash01(x * 13 + row, y * 7 + col * 10) < 0.75;
+            windowsMesh.setColorAt(count, lit ? _litColor : _dimColor);
             count++;
           }
         }
       }
     }
   }
+  finishWindows(count);
+}
+
+function finishWindows(count) {
   windowsMesh.count = count;
   windowsMesh.instanceMatrix.needsUpdate = true;
+  if (windowsMesh.instanceColor) windowsMesh.instanceColor.needsUpdate = true;
+}
+
+// =====================================================
+//  駐車車両 (InstancedMesh ×2、windows と同じ rebuild フロー)
+// =====================================================
+function initParkedCars() {
+  parkedBody = new THREE.InstancedMesh(
+    SHARED.box,
+    new THREE.MeshLambertMaterial({ color: 0xffffff }), // instanceColor 乗算用
+    W * H
+  );
+  parkedCabin = new THREE.InstancedMesh(SHARED.box, mat('#222831'), W * H);
+  parkedBody.count = 0;
+  parkedCabin.count = 0;
+  // 色バッファは最大容量で明示確保 (initWindows と同じ理由)
+  parkedBody.instanceColor = new THREE.InstancedBufferAttribute(
+    new Float32Array(W * H * 3), 3
+  );
+  parkedBody.castShadow = false;
+  parkedCabin.castShadow = false;
+  scene.add(parkedBody);
+  scene.add(parkedCabin);
+}
+
+function rebuildParkedCars() {
+  const C = CONFIG.VISUAL.CARS;
+  let n = 0;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (state.grid[y][x].type !== 'road') continue;
+      if (countRoadNeighbors(x, y) >= 3) continue; // 交差点には停めない
+      if (hash01(x + 5, y + 8) >= C.PARKED_RATIO) continue;
+      const vertical = isRoad(x, y - 1) || isRoad(x, y + 1);
+      const side = hash01(x + 9, y + 2) < 0.5 ? -0.32 : 0.32;
+      const px = x + 0.5 + (vertical ? side : 0);
+      const pz = y + 0.5 + (vertical ? 0 : side);
+      _dummyObj.rotation.set(0, vertical ? Math.PI / 2 : 0, 0);
+      _dummyObj.position.set(px, 0.21, pz);
+      _dummyObj.scale.set(0.34, 0.10, 0.16);
+      _dummyObj.updateMatrix();
+      parkedBody.setMatrixAt(n, _dummyObj.matrix);
+      parkedBody.setColorAt(n, _color.set(C.COLORS[Math.floor(hash01(x * 3, y * 7) * C.COLORS.length)]));
+      _dummyObj.position.y = 0.295;
+      _dummyObj.scale.set(0.18, 0.08, 0.14);
+      _dummyObj.updateMatrix();
+      parkedCabin.setMatrixAt(n, _dummyObj.matrix);
+      n++;
+    }
+  }
+  parkedBody.count = n;
+  parkedCabin.count = n;
+  parkedBody.instanceMatrix.needsUpdate = true;
+  parkedCabin.instanceMatrix.needsUpdate = true;
+  if (parkedBody.instanceColor) parkedBody.instanceColor.needsUpdate = true;
+}
+
+// =====================================================
+//  流れる雲 + 偽ブロブ影
+//   本物の影は影マップ凍結方式と相性が悪いので、
+//   薄い半透明の円盤を雲の真下に落として代用する
+// =====================================================
+function initClouds() {
+  const cloudMat = new THREE.MeshLambertMaterial({
+    color: 0xf4f8fb, transparent: true, opacity: 0.85, flatShading: true,
+  });
+  const blobMat = new THREE.MeshBasicMaterial({
+    color: 0x22384a, transparent: true, opacity: 0.08, depthWrite: false,
+  });
+  for (let i = 0; i < CONFIG.VISUAL.CLOUD_COUNT; i++) {
+    const g = new THREE.Group();
+    for (let k = 0; k < 3; k++) {
+      const s = new THREE.Mesh(SHARED.sphere, cloudMat);
+      s.scale.setScalar(2.0 + hash01(i, k) * 2.2);
+      s.position.set((k - 1) * 1.3, hash01(i, k + 9) * 0.5, (hash01(i, k + 5) - 0.5) * 1.4);
+      g.add(s);
+    }
+    const alt = 10 + hash01(i, 3) * 3;
+    const blob = new THREE.Mesh(SHARED.cyl, blobMat);
+    blob.scale.set(2.2, 0.005, 2.2);
+    blob.position.y = 0.18 - alt; // 子座標で相殺 → ワールド y≈0.18
+    g.add(blob);
+    g.position.set(hash01(i, 1) * (W + 16) - 8, alt, hash01(i, 2) * H);
+    g.userData.speed = 0.5 + hash01(i, 7) * 0.5;
+    anim.clouds.push(g);
+    scene.add(g);
+  }
+}
+
+// =====================================================
+//  走行車 (装飾のみ。左側通行、交差点で曲がる)
+// =====================================================
+function isRoad(x, y) {
+  return x >= 0 && y >= 0 && x < W && y < H && state.grid[y][x].type === 'road';
+}
+
+function laneOffset(dx, dy) {
+  // 左側通行: 進行方向の左側にオフセット
+  const L = CONFIG.VISUAL.CARS.LANE_OFFSET;
+  return { x: dy * L, z: -dx * L };
+}
+
+function rebuildRoadList() {
+  roadList = [];
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (state.grid[y][x].type === 'road') roadList.push([x, y]);
+    }
+  }
+  roadsVersion++;
+}
+
+function makeCarMesh(i) {
+  const C = CONFIG.VISUAL.CARS;
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(SHARED.box, mat(C.COLORS[i % C.COLORS.length]));
+  body.scale.set(0.34, 0.10, 0.16);
+  body.position.y = 0.21;
+  group.add(body);
+  const cabin = new THREE.Mesh(SHARED.box, mat('#222831'));
+  cabin.scale.set(0.18, 0.08, 0.14);
+  cabin.position.set(-0.02, 0.295, 0);
+  group.add(cabin);
+  group.visible = false;
+  return group;
+}
+
+function spawnCar(car) {
+  if (roadList.length === 0) {
+    car.mesh.visible = false;
+    car.idle = true;
+    car.roadsVersionAtIdle = roadsVersion;
+    return;
+  }
+  const [tx, ty] = roadList[Math.floor(Math.random() * roadList.length)];
+  const dirs = DIRS.filter(([dx, dy]) => isRoad(tx + dx, ty + dy));
+  if (dirs.length === 0) {
+    // 孤立タイル: 別の道路網ができるまで待つ
+    car.mesh.visible = false;
+    car.idle = true;
+    car.roadsVersionAtIdle = roadsVersion;
+    return;
+  }
+  const [dx, dy] = dirs[Math.floor(Math.random() * dirs.length)];
+  const lane = laneOffset(dx, dy);
+  car.dx = dx;
+  car.dy = dy;
+  car.from = { x: tx + 0.5 + lane.x, z: ty + 0.5 + lane.z };
+  car.tx = tx + dx;
+  car.ty = ty + dy;
+  car.to = { x: car.tx + 0.5 + lane.x, z: car.ty + 0.5 + lane.z };
+  car.progress = 0;
+  car.segLen = Math.max(0.0001, Math.hypot(car.to.x - car.from.x, car.to.z - car.from.z));
+  car.idle = false;
+  car.mesh.visible = true;
+}
+
+function chooseNext(car) {
+  const { tx, ty, dx, dy } = car;
+  const straight = [dx, dy];
+  const left  = [dy, -dx];
+  const right = [-dy, dx];
+  const options = [straight, left, right].filter(([ax, ay]) => isRoad(tx + ax, ty + ay));
+  let next = null;
+  if (options.length > 0) {
+    if (isRoad(tx + dx, ty + dy) && Math.random() < 0.65) {
+      next = straight; // 直進優先
+    } else {
+      next = options[Math.floor(Math.random() * options.length)];
+    }
+  } else if (isRoad(tx - dx, ty - dy)) {
+    next = [-dx, -dy]; // 行き止まり: U ターン
+  }
+  if (!next) {
+    // 完全に孤立: 道路網が変わるまで待機
+    car.idle = true;
+    car.roadsVersionAtIdle = roadsVersion;
+    return;
+  }
+  const [nx, ny] = next;
+  const lane = laneOffset(nx, ny);
+  car.dx = nx;
+  car.dy = ny;
+  car.from = { x: car.to.x, z: car.to.z };
+  car.tx = tx + nx;
+  car.ty = ty + ny;
+  car.to = { x: car.tx + 0.5 + lane.x, z: car.ty + 0.5 + lane.z };
+  car.progress = 0;
+  car.segLen = Math.max(0.0001, Math.hypot(car.to.x - car.from.x, car.to.z - car.from.z));
+}
+
+function placeCar(car) {
+  const t = Math.min(car.progress, 1);
+  const x = car.from.x + (car.to.x - car.from.x) * t;
+  const z = car.from.z + (car.to.z - car.from.z) * t;
+  car.mesh.position.set(x, 0, z);
+  const vx = car.to.x - car.from.x;
+  const vz = car.to.z - car.from.z;
+  if (Math.abs(vx) + Math.abs(vz) > 0.0001) {
+    car.mesh.rotation.y = Math.atan2(-vz, vx);
+  }
+}
+
+function updateCars(dt) {
+  const C = CONFIG.VISUAL.CARS;
+  // 道路量に応じた台数 (道路 3 タイルごとに 1 台、上限 MAX)
+  const desired = Math.min(C.MAX, Math.ceil(roadList.length / 3));
+  while (cars.length < C.MAX) {
+    const mesh = makeCarMesh(cars.length);
+    scene.add(mesh);
+    cars.push({
+      mesh, idle: true, roadsVersionAtIdle: -1,
+      tx: 0, ty: 0, dx: 1, dy: 0,
+      from: { x: 0, z: 0 }, to: { x: 0, z: 0 },
+      progress: 0, segLen: 1,
+    });
+  }
+  for (let i = 0; i < cars.length; i++) {
+    const car = cars[i];
+    if (i >= desired) {
+      car.mesh.visible = false;
+      car.idle = true;
+      car.roadsVersionAtIdle = -1; // 復帰時に必ずリスポーン
+      continue;
+    }
+    if (car.idle) {
+      if (car.roadsVersionAtIdle !== roadsVersion) spawnCar(car);
+      if (car.idle) continue;
+    }
+    // 足元の道路が消えた → 即リスポーン
+    if (!isRoad(car.tx, car.ty)) {
+      spawnCar(car);
+      if (car.idle) continue;
+    }
+    car.progress += (dt * C.SPEED) / car.segLen;
+    let guard = 4;
+    while (car.progress >= 1 && guard-- > 0) {
+      const overshoot = (car.progress - 1) * car.segLen;
+      chooseNext(car);
+      if (car.idle) break;
+      car.progress = overshoot / car.segLen;
+    }
+    if (!car.idle) placeCar(car);
+    else car.mesh.visible = false;
+  }
+}
+
+// =====================================================
+//  毎フレームのアニメーション (噴水・川・雲・車・窓)
+// =====================================================
+function animateDecor(dt) {
+  // 川のさざ波
+  if (riverGeo) {
+    const p = riverGeo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      p.setZ(i,
+        Math.sin(p.getX(i) * 0.6 + anim.t * 1.2) * 0.04 +
+        Math.sin(p.getY(i) * 2.0 + anim.t * 0.7) * 0.02
+      );
+    }
+    p.needsUpdate = true;
+  }
+  // 噴水プルームの脈動 (scale のみ。material は共有なので触らない)
+  for (const p of anim.plumes) {
+    const s = 1 + 0.15 * Math.sin(anim.t * 3 + p.userData.phase);
+    p.scale.set(2 - s, s, 2 - s);
+    p.position.y = 0.20 + 0.20 * s; // 根本を水盤に固定
+  }
+  // 流れる雲
+  for (const c of anim.clouds) {
+    c.position.x += c.userData.speed * dt;
+    if (c.position.x > W + 8) c.position.x = -8;
+  }
+  // 走行車
+  updateCars(dt);
+  // 窓のまたたき (約 400ms ごとに 15 個トグル)
+  if (windowsMesh.count > 0 && anim.t * 1000 - twinkleAt > 400) {
+    twinkleAt = anim.t * 1000;
+    for (let k = 0; k < 15; k++) {
+      const i = Math.floor(Math.random() * windowsMesh.count);
+      windowsMesh.setColorAt(i, Math.random() < 0.5 ? _litColor : _dimColor);
+    }
+    if (windowsMesh.instanceColor) windowsMesh.instanceColor.needsUpdate = true;
+  }
 }
 
 // =====================================================
@@ -354,7 +679,7 @@ function makeRoadMesh(x, y) {
 
 function countRoadNeighbors(x, y) {
   let n = 0;
-  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+  for (const [dx, dy] of DIRS) {
     const row = state.grid[y + dy];
     if (row && row[x + dx] && row[x + dx].type === 'road') n++;
   }
@@ -370,7 +695,7 @@ function makeResidentialMesh(x, y, occupancy) {
   const bodyMat = mat(wallHex);
 
   if (tier <= 3) {
-    // 低層: 本体 + ピラミッド屋根
+    // 低層: 本体 + ピラミッド屋根 + 玄関ドア + 生垣
     const w = 0.78 + hash01(x, y + 1) * 0.08;
     const body = new THREE.Mesh(SHARED.box, bodyMat);
     body.scale.set(w, h, w);
@@ -384,6 +709,19 @@ function makeResidentialMesh(x, y, occupancy) {
     roof.rotation.y = Math.PI / 4;
     roof.castShadow = true;
     group.add(roof);
+    // 玄関ドア
+    const door = new THREE.Mesh(SHARED.box, mat('#4a3828'));
+    door.scale.set(0.16, 0.30, 0.03);
+    door.position.set(0, 0.15, w / 2 + 0.02);
+    group.add(door);
+    // 生垣 (ドアの両脇)
+    const hedgeMat = mat('#3f7a33');
+    for (const hx of [-0.26, 0.26]) {
+      const hg = new THREE.Mesh(SHARED.box, hedgeMat);
+      hg.scale.set(0.30, 0.18, 0.10);
+      hg.position.set(hx, 0.09, w / 2 + 0.08);
+      group.add(hg);
+    }
     group.userData.body = body;
   } else if (tier <= 8) {
     // 中層: フラット屋根 + バルコニー + 屋上 AC
@@ -442,7 +780,7 @@ function makePlazaMesh(x, y) {
   group.add(floor);
   const useFountain = hash01(x + 2, y + 4) < CONFIG.PLAZA.FOUNTAIN_PROBABILITY;
   if (useFountain) {
-    // 噴水: 基盤 + 水盤 + 噴き上がりコーン
+    // 噴水: 基盤 + 水盤 + 脈動するプルーム
     const basin = new THREE.Mesh(SHARED.cyl, mat('#b8b0a8'));
     basin.scale.set(0.3, 0.1, 0.3);
     basin.position.y = 0.10;
@@ -454,6 +792,9 @@ function makePlazaMesh(x, y) {
     group.add(water);
     const plume = new THREE.Mesh(SHARED.cone8, mat('#cfe5f0', { transparent: true, opacity: 0.55 }));
     plume.position.y = 0.40;
+    plume.userData.phase = hash01(x, y) * Math.PI * 2; // 噴水ごとに位相をずらす
+    anim.plumes.push(plume);
+    group.userData.plume = plume; // disposeMesh がレジストリから除去する用
     group.add(plume);
   } else {
     // ベンチ
@@ -480,17 +821,32 @@ function makeTreeMesh(x, y) {
   trunk.position.y = 0.2 * scale;
   trunk.castShadow = true;
   group.add(trunk);
-  // 桜 / 通常
-  const isSakura = hash01(x + 7, y + 13) < CONFIG.VISUAL.SAKURA_RATIO;
-  const leafHex = isSakura
-    ? CONFIG.VISUAL.PALETTE.SAKURA[Math.floor(hash01(x * 11, y * 9) * CONFIG.VISUAL.PALETTE.SAKURA.length)]
-    : '#4f8a3a';
-  const leafTint = 0.90 + hash01(x * 7, y * 11) * 0.20;
-  const leaf = new THREE.Mesh(SHARED.sphere, mat(leafHex));
-  leaf.position.y = (0.4 + 0.18) * scale;
-  leaf.scale.setScalar(scale * leafTint);
-  leaf.castShadow = true;
-  group.add(leaf);
+  // 松 / 桜 / 通常 の 3 種
+  const isPine = hash01(x + 4, y + 17) < CONFIG.VISUAL.PINE_RATIO;
+  if (isPine) {
+    const pmat = mat('#3a6a3a');
+    const lower = new THREE.Mesh(SHARED.pine, pmat);
+    lower.position.y = 0.55 * scale;
+    lower.scale.setScalar(scale);
+    lower.castShadow = true;
+    group.add(lower);
+    const upper = new THREE.Mesh(SHARED.pine, pmat);
+    upper.position.y = 0.95 * scale;
+    upper.scale.setScalar(scale * 0.7);
+    upper.castShadow = true;
+    group.add(upper);
+  } else {
+    const isSakura = hash01(x + 7, y + 13) < CONFIG.VISUAL.SAKURA_RATIO;
+    const leafHex = isSakura
+      ? CONFIG.VISUAL.PALETTE.SAKURA[Math.floor(hash01(x * 11, y * 9) * CONFIG.VISUAL.PALETTE.SAKURA.length)]
+      : '#4f8a3a';
+    const leafTint = 0.90 + hash01(x * 7, y * 11) * 0.20;
+    const leaf = new THREE.Mesh(SHARED.sphere, mat(leafHex));
+    leaf.position.y = (0.4 + 0.18) * scale;
+    leaf.scale.setScalar(scale * leafTint);
+    leaf.castShadow = true;
+    group.add(leaf);
+  }
   const offX = (hash01(x, y * 2) - 0.5) * 0.5;
   const offZ = (hash01(x * 3, y) - 0.5) * 0.5;
   group.position.set(x + 0.5 + offX, 0, y + 0.5 + offZ);
@@ -501,7 +857,13 @@ function makeTreeMesh(x, y) {
 
 function disposeMesh(mesh) {
   scene.remove(mesh);
-  // geo/mat は SHARED + MAT_CACHE で使い回しているので dispose しない
+  // geo/mat は SHARED + MAT_CACHE で使い回しているので dispose しない。
+  // 噴水プルームはアニメレジストリからも除去 (リーク防止)
+  const p = mesh.userData && mesh.userData.plume;
+  if (p) {
+    const i = anim.plumes.indexOf(p);
+    if (i >= 0) anim.plumes.splice(i, 1);
+  }
 }
 
 // =====================================================
@@ -549,13 +911,22 @@ function updateTiles() {
   }
   if (changed) {
     rebuildWindows();
+    rebuildParkedCars();
+    rebuildRoadList();
     tilesDirty = true;
   }
 }
 
 export function render() {
+  const now = performance.now();
+  // タブ復帰時のワープ防止に dt をクランプ
+  const dt = Math.min((now - lastNow) / 1000, 0.1);
+  lastNow = now;
+  anim.t = now / 1000;
+
   if (controls) controls.update();
   updateTiles();
+  animateDecor(dt);
   if (tilesDirty) {
     renderer.shadowMap.needsUpdate = true;
     tilesDirty = false;

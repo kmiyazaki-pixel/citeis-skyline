@@ -5,9 +5,8 @@
 export const CONFIG = {
   // グリッド
   GRID: {
-    WIDTH: 24,
-    HEIGHT: 24,
-    TILE_SIZE: 24,  // px (Canvas内の論理サイズ)
+    WIDTH: 32,
+    HEIGHT: 32,
   },
 
   // タイル設置コスト ($)
@@ -19,8 +18,8 @@ export const CONFIG = {
   },
 
   // 経済
-  STARTING_CASH: 10000,
-  TICK_INTERVAL: 500,  // ms ごとに 1tick
+  STARTING_CASH: 15000,  // 32×32 拡張に合わせて増額 (面積比例まではしない)
+  TICK_INTERVAL: 500,    // ms ごとに 1tick
 
   // 住宅
   RESIDENTIAL: {
@@ -57,9 +56,20 @@ export const CONFIG = {
       MID_RATIO: 0.30,  // 30% を中層
       STORY_H:   0.9,   // 1階分の高さ
     },
-    DOWNTOWN_RADIUS:    6,    // 中心からこの距離内は高層出現率アップ
+    DOWNTOWN_RADIUS:    8,    // 中心からこの距離内は高層出現率アップ (W/4 を維持)
     SAKURA_RATIO:       0.25, // 街路樹のうち桜の割合
+    PINE_RATIO:         0.20, // 街路樹のうち松の割合
     STREETLIGHT_HEIGHT: 1.6,
-    MAX_WINDOWS:        20000, // InstancedMesh の上限
+    MAX_WINDOWS:        40000, // InstancedMesh の上限 (32×32 最悪ケース ≈ 37k)
+    CLOUD_COUNT:        7,     // 流れる雲の数
+
+    // 車 (走行車 + 駐車車両で共有。装飾のみ)
+    CARS: {
+      MAX:          14,    // 走行車の最大台数
+      SPEED:        1.6,   // タイル / 秒
+      LANE_OFFSET:  0.17,  // 左側通行のレーンオフセット
+      PARKED_RATIO: 0.30,  // 道路タイルに駐車車両が置かれる割合
+      COLORS: ['#d04a3a', '#3a6ad0', '#e8e8e8', '#3a3e44', '#d0a83a', '#4a8a5a'],
+    },
   },
 };
