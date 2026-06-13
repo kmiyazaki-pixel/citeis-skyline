@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { fbm, valueNoise, hash2 } from './noise.js';
 import { scene, isMobile } from './engine.js';
+import { skyUniforms } from './sky.js';
 
 const SIZE = CONFIG.WORLD.CHUNK_SIZE;
 const SEG = CONFIG.WORLD.CHUNK_SEGMENTS;
@@ -85,9 +86,50 @@ const MAT = {
     color: 0x9ff0ff, emissive: 0x2ad6f0, emissiveIntensity: 1.6,
     roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.92,
   }),
-  water: new THREE.MeshStandardMaterial({
-    color: 0x2f7fae, transparent: true, opacity: 0.72,
-    roughness: 0.25, metalness: 0.15,
+  water: new THREE.ShaderMaterial({
+    transparent: true,
+    fog: false, // フォグはシェーダ内で手動 (空ドームに溶ける)
+    uniforms: {
+      uTime: windUniforms.uTime,         // 風と共有 (毎フレーム更新)
+      uSunDir: skyUniforms.uSunDir,       // 空と共有
+      uHorizon: skyUniforms.uHorizon,
+      uSunColor: skyUniforms.uSunColor,
+      uDeep: { value: new THREE.Color(0x123f5e) },
+      uShallow: { value: new THREE.Color(0x3f93b0) },
+      uFogColor: { value: new THREE.Color(0xaee3f5) },
+      uFogNear: { value: 70 },
+      uFogFar: { value: 230 },
+    },
+    vertexShader: `
+      uniform float uTime;
+      varying vec3 vWorld;
+      void main() {
+        vec3 p = position;
+        vec4 wp0 = modelMatrix * vec4(p, 1.0);
+        // ゲルストナー風の重ね波 (local z = 回転後の世界 Y)
+        p.z += sin(wp0.x * 0.18 + uTime * 1.1) * 0.18
+             + cos(wp0.z * 0.22 - uTime * 0.8) * 0.12
+             + sin((wp0.x + wp0.z) * 0.45 + uTime * 1.7) * 0.05;
+        vec4 wp = modelMatrix * vec4(p, 1.0);
+        vWorld = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }`,
+    fragmentShader: `
+      uniform vec3 uSunDir, uHorizon, uSunColor, uDeep, uShallow, uFogColor;
+      uniform float uFogNear, uFogFar;
+      varying vec3 vWorld;
+      void main() {
+        vec3 V = normalize(cameraPosition - vWorld);
+        vec3 N = vec3(0.0, 1.0, 0.0);
+        float fres = pow(1.0 - max(dot(V, N), 0.0), 3.0);       // フレネル
+        vec3 base = mix(uDeep, uShallow, clamp(V.y * 1.2, 0.0, 1.0));
+        vec3 col = mix(base, uHorizon, fres * 0.75);            // 空色を映す
+        vec3 R = reflect(-normalize(uSunDir), N);
+        col += uSunColor * pow(max(dot(V, R), 0.0), 200.0) * 1.8; // 太陽のきらめき
+        float d = length(cameraPosition - vWorld);
+        col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, d));
+        gl_FragColor = vec4(col, 0.84);
+      }`,
   }),
   pillar: new THREE.MeshStandardMaterial({
     color: 0xaef0ff, emissive: 0x6fe0ff, emissiveIntensity: 1.8,
@@ -101,11 +143,20 @@ applyWind(MAT.flower, 0.05);
 
 const COL = {
   sand: new THREE.Color('#e7d9a8'),
-  grassA: new THREE.Color('#69b25c'),
-  grassB: new THREE.Color('#4e9a4e'),
+  grassA: new THREE.Color('#6cb85f'),
+  grassB: new THREE.Color('#4c9648'),
+  grassDark: new THREE.Color('#3c7a3e'),  // 林床
+  meadow: new THREE.Color('#86c96a'),     // 明るい草原
+  highland: new THREE.Color('#9aa86a'),   // 高地の黄緑
   rock: new THREE.Color('#8d8577'),
   snow: new THREE.Color('#f4f7fa'),
+  wet: new THREE.Color('#5a8a86'),        // 渚の湿り
 };
+
+function ss(a, b, x) {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+}
 const FLOWER_COLORS = [
   new THREE.Color('#ffffff'), new THREE.Color('#ffd34d'),
   new THREE.Color('#ff8fb3'), new THREE.Color('#b48fff'),
@@ -215,15 +266,32 @@ function buildChunk(cx, cz) {
     pos.setY(i, h);
     // 高さと傾斜で色分け (傾斜は隣接グリッド差分)
     const slope = Math.abs(hg[gz * N + gx + 1] - h) + Math.abs(hg[(gz + 1) * N + gx] - h);
-    if (h < CONFIG.WATER_LEVEL + 0.5) {
-      _c.copy(COL.sand);
-    } else if (slope > SLOPE_ROCK) {
-      _c.copy(COL.rock);
-    } else if (h > 11.5) {
-      _c.copy(COL.snow);
-    } else {
-      _c.lerpColors(COL.grassA, COL.grassB, valueNoise(wx * 0.15, wz * 0.15, 7));
-    }
+
+    // --- 草地のベース色: 細かいノイズ + 大スケールのバイオーム ---
+    const wl = CONFIG.WATER_LEVEL;
+    const biome = valueNoise(wx * 0.004, wz * 0.004, 5);      // 0..1 大域
+    const detail = valueNoise(wx * 0.15, wz * 0.15, 7);
+    _c.lerpColors(COL.grassA, COL.grassB, detail);
+    if (biome < 0.38) _c.lerp(COL.meadow, ss(0.38, 0.1, biome) * 0.6);      // 草原
+    else if (biome > 0.66) _c.lerp(COL.grassDark, ss(0.66, 0.92, biome) * 0.55); // 森
+    if (h > 9) _c.lerp(COL.highland, ss(9, 11.5, h) * 0.5);                  // 高地
+
+    // --- 砂浜 / 岩 / 雪へ連続ブレンド ---
+    _c.lerp(COL.sand, ss(wl + 1.4, wl + 0.4, h));
+    _c.lerp(COL.rock, ss(SLOPE_ROCK * 0.65, SLOPE_ROCK * 1.25, slope) * (h > wl + 0.4 ? 1 : 0));
+    _c.lerp(COL.snow, ss(10.6, 12.6, h));
+    // 渚の湿り (水際を少し暗く青く)
+    _c.lerp(COL.wet, ss(wl + 0.6, wl - 0.1, h) * 0.6);
+
+    // --- 谷の AO (周囲より低い窪みを暗く) ---
+    const gxm = gx > 0 ? gx - 1 : gx + 1;
+    const gzm = gz > 0 ? gz - 1 : gz + 1;
+    const avg = (hg[gz * N + gx + 1] + hg[gz * N + gxm] + hg[(gz + 1) * N + gx] + hg[gzm * N + gx]) * 0.25;
+    const relief = h - avg;
+    const ao = 1 - ss(0, -1.3, relief) * 0.22;       // 窪みで最大22%暗く
+    const shade = 1 - ss(SLOPE_ROCK * 0.4, SLOPE_ROCK * 1.6, slope) * 0.18; // 急斜面も陰
+    _c.multiplyScalar(ao * shade);
+
     colors[i * 3] = _c.r;
     colors[i * 3 + 1] = _c.g;
     colors[i * 3 + 2] = _c.b;
@@ -490,21 +558,13 @@ export function updateWorld(dt, playerPos) {
     built++;
   }
 
-  // 水面はプレイヤーに追従しつつ頂点で波を作る (波はワールド固定)
+  // 水面はプレイヤーに追従 (波・フレネル・きらめきは GPU シェーダ)
   if (water) {
     water.position.x = playerPos.x;
     water.position.z = playerPos.z;
     water.position.y = CONFIG.WATER_LEVEL;
-    const wp = waterGeo.attributes.position;
-    for (let i = 0; i < wp.count; i++) {
-      const wx = wp.getX(i) + playerPos.x;
-      const wz = -wp.getY(i) + playerPos.z; // 回転前の local y は世界 -z に対応
-      wp.setZ(i,
-        Math.sin(wx * 0.18 + elapsed * 1.1) * 0.18 +
-        Math.cos(wz * 0.22 - elapsed * 0.8) * 0.12
-      );
-    }
-    wp.needsUpdate = true;
+    // 霧色を現在の大気色に追従させて遠景の水を空ドームへ溶かす
+    MAT.water.uniforms.uFogColor.value.copy(scene.fog.color);
   }
   // 遠景の山もプレイヤー追従 (常に地平線にある)
   if (mountains) {
