@@ -99,9 +99,11 @@ export function updatePlayer(dt) {
   const p = state.player;
   const inp = state.input;
 
-  // --- 視点 (消費式の delta) ---
-  p.yaw -= inp.lookDX * P.CAM_SENSITIVITY;
-  p.pitch += inp.lookDY * P.CAM_SENSITIVITY;
+  // --- 視点 (消費式の delta、感度・上下反転を反映) ---
+  const sens = P.CAM_SENSITIVITY * state.settings.sensitivity;
+  const invY = state.settings.invertY ? -1 : 1;
+  p.yaw -= inp.lookDX * sens;
+  p.pitch += inp.lookDY * sens * invY;
   p.pitch = Math.max(P.PITCH_MIN, Math.min(P.PITCH_MAX, p.pitch));
   inp.lookDX = 0;
   inp.lookDY = 0;

@@ -9,10 +9,11 @@ import { setupPlayer, updatePlayer, updateTitleCamera } from './player.js';
 import { setupInput } from './input.js';
 import { setupSky, updateSky } from './sky.js';
 import { setupCreatures, updateCreatures } from './creatures.js';
-import { setupHUD, updateHUD, showPickupPopup, showBanner } from './hud.js';
+import { setupHUD, updateHUD, showPickupPopup, showBanner, setupPause } from './hud.js';
 import { playPickup, updateAmbience } from './audio.js';
 import { CONFIG } from './config.js';
 import { save } from './save.js';
+import { loadSettings, applySettings } from './settings.js';
 
 // ---------- エラーを画面に出す (スマホでのデバッグ補助) ----------
 const $errToast = document.getElementById('errToast');
@@ -71,7 +72,7 @@ function frame(now) {
   if (!state.started) {
     // タイトル画面はワールドをゆっくり旋回して見せる
     updateTitleCamera(dt);
-  } else {
+  } else if (!state.paused) {
     updatePlayer(dt);
     const picked = updateWorld(dt, state.player.pos);
     if (picked.length > 0) {
@@ -96,13 +97,16 @@ function frame(now) {
 // ---------- 初期化 ----------
 function init() {
   const canvas = document.getElementById('canvas');
+  loadSettings();             // 先に設定を読む (音量等を初期化前に反映)
   setupEngine(canvas);
+  applySettings();            // 影・音量を設定値で反映
   setupSky();
   setupPlayer();              // スポーン地点を確定 (world は heightAt だけ使う)
   initWorld(state.player.pos.x, state.player.pos.z);
   setupCreatures(state.player.pos.x, state.player.pos.z);
   setupInput(canvas);
   setupHUD();
+  setupPause();
 
   // 開発用フック (preview からの動作検証に使う。削除しないこと)
   window.__game = { state };

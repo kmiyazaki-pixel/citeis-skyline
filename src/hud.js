@@ -6,7 +6,8 @@ import * as THREE from 'three';
 import { state } from './state.js';
 import { initAudio } from './audio.js';
 import { isTouch, camera } from './engine.js';
-import { hasSave, loadAndApply, clearSave } from './save.js';
+import { hasSave, loadAndApply, clearSave, save } from './save.js';
+import { saveSettings, applySettings } from './settings.js';
 
 const $crystal = document.getElementById('crystalCount');
 const $clock = document.getElementById('clock');
@@ -60,6 +61,64 @@ export function showBanner(text) {
   $banner.classList.remove('show');
   void $banner.offsetWidth; // アニメ再start用にreflow
   $banner.classList.add('show');
+}
+
+// ---------- 一時停止 + 設定パネル ----------
+const $pause = document.getElementById('pause');
+
+export function togglePause() {
+  if (!state.started) return;
+  setPaused(!state.paused);
+}
+
+function setPaused(on) {
+  state.paused = on;
+  $pause.classList.toggle('hidden', !on);
+  if (on && document.exitPointerLock) document.exitPointerLock();
+}
+
+export function setupPause() {
+  const s = state.settings;
+  // スライダー: [id, settingKey, 表示倍率(%表示なら100), ラベルid, suffix]
+  const sliders = [
+    ['volMaster', 'volMaster', 100, 'volMasterVal', '%'],
+    ['volSfx', 'volSfx', 100, 'volSfxVal', '%'],
+    ['volAmbience', 'volAmbience', 100, 'volAmbienceVal', '%'],
+    ['volMusic', 'volMusic', 100, 'volMusicVal', '%'],
+    ['sensitivity', 'sensitivity', 100, 'sensVal', ''],
+  ];
+  for (const [id, key, mul, labelId, suf] of sliders) {
+    const el = document.getElementById(id);
+    const lab = document.getElementById(labelId);
+    const reflect = () => {
+      lab.textContent = suf === '%' ? Math.round(s[key] * 100) + '%' : s[key].toFixed(1);
+    };
+    el.value = Math.round(s[key] * mul);
+    reflect();
+    el.addEventListener('input', () => {
+      s[key] = el.value / mul;
+      reflect();
+      applySettings();
+      saveSettings();
+    });
+  }
+  const invertY = document.getElementById('invertY');
+  const shadows = document.getElementById('shadows');
+  invertY.checked = s.invertY;
+  shadows.checked = s.shadows;
+  invertY.addEventListener('change', () => { s.invertY = invertY.checked; saveSettings(); });
+  shadows.addEventListener('change', () => { s.shadows = shadows.checked; applySettings(); saveSettings(); });
+
+  document.getElementById('howto').textContent = isTouch
+    ? '左下スティック: 移動 / 強く倒す: ダッシュ ・ 画面ドラッグ: 視点 ・ 右下: ジャンプ(長押しでグライド)'
+    : 'WASD/矢印: 移動 ・ ドラッグ/ロック: 視点 ・ Space: ジャンプ(長押しでグライド) ・ Shift: ダッシュ ・ Esc: 一時停止';
+
+  document.getElementById('pauseBtn').addEventListener('click', () => togglePause());
+  document.getElementById('resumeBtn').addEventListener('click', () => setPaused(false));
+  document.getElementById('toTitleBtn').addEventListener('click', () => {
+    save();
+    location.reload(); // タイトルへ (つづきから で復帰できる)
+  });
 }
 
 // クリスタル取得時、その位置に「+1」を浮かせる

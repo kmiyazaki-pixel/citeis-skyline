@@ -31,6 +31,13 @@
 
 #compass { margin-left: auto; }
 
+#pauseBtn {
+  pointer-events: auto;
+  cursor: pointer;
+  font-family: inherit;
+  color: #fff;
+}
+
 #hint {
   position: absolute;
   bottom: 10px;
@@ -147,6 +154,93 @@
 }
 
 #title.hidden { display: none; }
+
+/* ========= 一時停止 / 設定 ========= */
+#pause {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(13, 20, 48, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+#pause.hidden { display: none; }
+
+.pause-panel {
+  width: min(420px, 90vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: linear-gradient(180deg, #1a2547, #0f1733);
+  border: 1px solid rgba(174, 240, 255, 0.35);
+  border-radius: 18px;
+  padding: 22px 24px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+}
+
+.pause-panel h2 {
+  text-align: center;
+  font-size: 24px;
+  margin-bottom: 14px;
+  letter-spacing: 3px;
+}
+
+.setting {
+  margin: 12px 0;
+  font-size: 13px;
+}
+
+.setting label { display: block; margin-bottom: 4px; opacity: 0.9; }
+.setting.row { display: flex; gap: 20px; }
+.setting.row label { display: inline-flex; align-items: center; gap: 6px; }
+
+.setting input[type="range"] {
+  width: 100%;
+  accent-color: #5fc7e8;
+}
+
+.setting span { color: #aef0ff; font-weight: 700; }
+
+.howto {
+  font-size: 11px;
+  opacity: 0.65;
+  line-height: 1.6;
+  margin: 12px 0;
+}
+
+.pause-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.pause-buttons button {
+  flex: 1;
+  padding: 12px;
+  font-family: inherit;
+  font-weight: 900;
+  font-size: 15px;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  color: #0d1430;
+  background: linear-gradient(180deg, #aef0ff, #5fc7e8);
+}
+
+.pause-buttons button.ghost {
+  background: transparent;
+  color: #aef0ff;
+  border: 1px solid rgba(174, 240, 255, 0.5);
+}
+
+.credits {
+  text-align: center;
+  font-size: 10px;
+  opacity: 0.45;
+  margin-top: 14px;
+}
 
 /* ========= エラートースト (開発補助) ========= */
 #errToast {

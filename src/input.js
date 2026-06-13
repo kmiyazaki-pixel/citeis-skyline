@@ -7,6 +7,7 @@
 
 import { state } from './state.js';
 import { isTouch } from './engine.js';
+import { togglePause } from './hud.js';
 
 const keys = new Set();
 let dragging = false;
@@ -24,6 +25,7 @@ export function setupInput(canvas) {
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
       e.preventDefault();
     }
+    if (e.code === 'Escape') { togglePause(); return; }
     if (e.code === 'Space' && !keys.has('Space') && state.started) {
       state.input.jumpQueued = true;
       state.input.jumpHeld = true;

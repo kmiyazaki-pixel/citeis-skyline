@@ -31,8 +31,45 @@
       <div class="hud-chip" id="crystalCount">💎 0</div>
       <div class="hud-chip" id="clock">☀️ 08:00</div>
       <div class="hud-chip" id="compass">北</div>
+      <button class="hud-chip" id="pauseBtn">☰</button>
     </div>
     <div id="hint">WASD/矢印: 移動 ・ ドラッグ: 視点 ・ Space: ジャンプ ・ Shift: ダッシュ</div>
+  </div>
+
+  <div id="pause" class="hidden">
+    <div class="pause-panel">
+      <h2>一時停止</h2>
+      <div class="setting">
+        <label>マスター音量 <span id="volMasterVal">80%</span></label>
+        <input type="range" id="volMaster" min="0" max="100" value="80">
+      </div>
+      <div class="setting">
+        <label>効果音 <span id="volSfxVal">100%</span></label>
+        <input type="range" id="volSfx" min="0" max="100" value="100">
+      </div>
+      <div class="setting">
+        <label>環境音 <span id="volAmbienceVal">60%</span></label>
+        <input type="range" id="volAmbience" min="0" max="100" value="60">
+      </div>
+      <div class="setting">
+        <label>BGM <span id="volMusicVal">50%</span></label>
+        <input type="range" id="volMusic" min="0" max="100" value="50">
+      </div>
+      <div class="setting">
+        <label>視点感度 <span id="sensVal">1.0</span></label>
+        <input type="range" id="sensitivity" min="30" max="200" value="100">
+      </div>
+      <div class="setting row">
+        <label><input type="checkbox" id="invertY"> 上下反転</label>
+        <label><input type="checkbox" id="shadows" checked> 影</label>
+      </div>
+      <p class="howto" id="howto"></p>
+      <div class="pause-buttons">
+        <button id="resumeBtn">つづける</button>
+        <button id="toTitleBtn" class="ghost">タイトルへ</button>
+      </div>
+      <p class="credits">こもれび平原 — Three.js + Vanilla JS</p>
+    </div>
   </div>
 
   <div id="banner"></div>
