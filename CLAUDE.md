@@ -43,23 +43,25 @@
 
 ```
 .
-├── index.html          HTML骨格 (HUD、タイトル画面、ジョイスティック)
+├── index.html          HTML骨格 (HUD、タイトル画面、ジョイスティック、favicon/manifest)
+├── manifest.webmanifest PWA マニフェスト (アイコンは emoji の SVG data-URI)
+├── sw.js               Service Worker (network-first、オフライン対応)
 ├── styles/
 │   ├── base.css        リセット、全画面キャンバス
-│   └── ui.css          HUD、タイトル画面、タッチUI
+│   └── ui.css          HUD、タイトル画面、タッチUI、「+1」ポップ
 └── src/
     ├── main.js         エントリ。ゲームループ (rAF+setTimeout 先勝ち) とエラートースト
-    ├── config.js       チューニング用の定数 (地形・プレイヤー・昼夜・密度)
+    ├── config.js       チューニング用の定数 (地形・プレイヤー・昼夜・密度・手触り)
     ├── state.js        ゲーム状態 (player / input / timeOfDay / crystals)
-    ├── engine.js       Three.js renderer/scene/camera/lights の生成と resize
+    ├── engine.js       Three.js renderer/scene/camera/lights + EffectComposer(Bloom)
     ├── noise.js        決定的ハッシュ + value noise + fBm (依存なし)
-    ├── world.js        チャンク式地形生成、heightAt、木/岩/花/クリスタル、水面
-    ├── player.js       三人称キャラ操作、カメラ、ボックス人型アバター
+    ├── world.js        チャンク式地形生成、heightAt、木/岩/花/クリスタル、水面、風揺れ
+    ├── player.js       三人称キャラ操作、カメラ(遅延追従/FOV/着地)、人型アバター
     ├── input.js        キーボード/マウス/タッチ → state.input
     ├── sky.js          昼夜サイクル (太陽/月/星/空色/霧/ライト)
     ├── creatures.js    野ウサギ (徘徊 + 逃走)
-    ├── audio.js        WebAudio 合成効果音
-    └── hud.js          HUD表示、タイトル画面の開始処理
+    ├── audio.js        WebAudio 合成 (効果音・足音・昼夜の環境音)
+    └── hud.js          HUD表示、タイトル画面、クリスタル「+1」ポップ
 ```
 
 ## 設計上のお約束
@@ -92,12 +94,15 @@
 ## 現在のステータス
 
 - [x] **v1 (旧)**: 街づくりシミュ Phase 1〜1.75 (git 履歴参照)
-- [x] **v2**: オープンワールド化 — 地形/プレイヤー/昼夜/クリスタル/ウサギ ← **ここ完了**
-- [ ] 木や岩との衝突判定 (今はすり抜ける)
-- [ ] バイオーム (砂漠・雪原などノイズで地域分け)
-- [ ] クエスト/目標 (クリスタル N 個でなにか起きる)
-- [ ] セーブ (localStorage に位置と収集状況)
-- [ ] 泳ぎ (今は水中でも歩く)
+- [x] **v2**: オープンワールド化 — 地形/プレイヤー/昼夜/クリスタル/ウサギ
+- [x] **Tier 1**: 市販寄せの磨き込み (制約維持) ← **ここ完了**
+  - ACES トーンマップ + MeshStandard + Bloom、木葉/草の風揺れ
+  - ゲームフィール (カメラ遅延追従・ダッシュFOV・着地dip・クリスタル吸寄せ・「+1」ポップ)
+  - 環境音 (風/昼の鳥/夜の虫) + 地形別足音・着地・水しぶき
+  - タイトル背景のワールド旋回、emoji favicon、PWA(manifest+SW)、reduced-motion対応
+- [ ] **Tier 2**: 進行システム (収集→能力解放)、クエスト、セーブ、一時停止/設定、BGM
+- [ ] **Tier 3**: 出荷 (衝突判定、v1.0スコープ確定、itch.io→Steam、コンテンツ量)
+- 個別の積み残し: 木/岩の衝突判定、バイオーム、泳ぎ
 
 ## ローカル開発
 

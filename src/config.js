@@ -38,6 +38,12 @@ export const CONFIG = {
     CAM_SENSITIVITY: 0.0034,
     PITCH_MIN: -0.4,     // rad (見上げ限界)
     PITCH_MAX: 1.25,     // rad (見下ろし限界)
+    CAM_LERP: 9,         // カメラ位置の遅延追従の速さ (大きいほど機敏)
+    FOV_BASE: 60,        // 通常の視野角
+    FOV_DASH: 66,        // ダッシュ中の視野角 (スピード感)
+    FOV_LERP: 6,         // 視野角の補間速度
+    LAND_DIP: 0.32,      // 着地時にカメラが沈む量
+    LAND_DIP_RECOVER: 6, // 着地沈み込みの戻る速さ
   },
 
   // 昼夜サイクル
@@ -66,5 +72,7 @@ export const CONFIG = {
     SLEEP_DIST: 220,     // プレイヤーがこれ以上遠いと更新停止
   },
 
-  PICKUP_DIST: 1.8,      // クリスタル取得距離
+  PICKUP_DIST: 1.6,      // クリスタル取得距離
+  MAGNET_DIST: 4.5,      // この距離まで近づくとクリスタルが吸い寄せられる
+  MAGNET_SPEED: 9,       // 吸い寄せの速さ
 };

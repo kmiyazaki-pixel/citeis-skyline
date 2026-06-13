@@ -2,15 +2,15 @@
 //  エントリポイント - 初期化とゲームループ
 // =====================================================
 
-import { setupEngine, renderer, scene, camera } from './engine.js';
+import { setupEngine, renderFrame } from './engine.js';
 import { state } from './state.js';
 import { initWorld, updateWorld } from './world.js';
-import { setupPlayer, updatePlayer } from './player.js';
+import { setupPlayer, updatePlayer, updateTitleCamera } from './player.js';
 import { setupInput } from './input.js';
 import { setupSky, updateSky } from './sky.js';
 import { setupCreatures, updateCreatures } from './creatures.js';
-import { setupHUD, updateHUD } from './hud.js';
-import { playPickup } from './audio.js';
+import { setupHUD, updateHUD, showPickupPopup } from './hud.js';
+import { playPickup, updateAmbience } from './audio.js';
 
 // ---------- エラーを画面に出す (スマホでのデバッグ補助) ----------
 const $errToast = document.getElementById('errToast');
@@ -47,18 +47,23 @@ function frame(now) {
   // 空はタイトル画面でも動かす (背景演出)
   updateSky(dt, state.player.pos);
 
-  if (state.started) {
+  if (!state.started) {
+    // タイトル画面はワールドをゆっくり旋回して見せる
+    updateTitleCamera(dt);
+  } else {
     updatePlayer(dt);
     const picked = updateWorld(dt, state.player.pos);
-    if (picked > 0) {
-      state.crystals += picked;
+    if (picked.length > 0) {
+      state.crystals += picked.length;
       playPickup();
+      for (const pos of picked) showPickupPopup(pos);
     }
     updateCreatures(dt, state.player.pos);
+    updateAmbience(dt, state.timeOfDay);
     updateHUD();
   }
 
-  renderer.render(scene, camera);
+  renderFrame();
   scheduleNextFrame();
 }
 
@@ -75,6 +80,13 @@ function init() {
 
   // 開発用フック (preview からの動作検証に使う。削除しないこと)
   window.__game = { state };
+
+  // PWA: オフライン対応 (ホーム画面に追加して遊べる)
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
 
   lastNow = performance.now();
   scheduleNextFrame();

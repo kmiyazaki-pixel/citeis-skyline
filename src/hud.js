@@ -2,9 +2,10 @@
 //  HUD - 画面上の情報表示とタイトル画面
 // =====================================================
 
+import * as THREE from 'three';
 import { state } from './state.js';
 import { initAudio } from './audio.js';
-import { isTouch } from './engine.js';
+import { isTouch, camera } from './engine.js';
 
 const $crystal = document.getElementById('crystalCount');
 const $clock = document.getElementById('clock');
@@ -12,6 +13,9 @@ const $compass = document.getElementById('compass');
 const $hint = document.getElementById('hint');
 const $title = document.getElementById('title');
 const $hud = document.getElementById('hud');
+const $app = document.getElementById('app');
+
+const _proj = new THREE.Vector3();
 
 const DIRS = ['北', '北東', '東', '南東', '南', '南西', '西', '北西'];
 
@@ -40,6 +44,21 @@ export function setupHUD() {
   window.addEventListener('touchstart', () => {
     $hint.textContent = '左下スティック: 移動 ・ 画面ドラッグ: 視点 ・ 右下: ジャンプ';
   }, { once: true });
+}
+
+// クリスタル取得時、その位置に「+1」を浮かせる
+export function showPickupPopup(worldPos) {
+  _proj.set(worldPos.x, worldPos.y, worldPos.z).project(camera);
+  if (_proj.z > 1) return; // カメラ後方は出さない
+  const x = (_proj.x * 0.5 + 0.5) * window.innerWidth;
+  const y = (-_proj.y * 0.5 + 0.5) * window.innerHeight;
+  const el = document.createElement('div');
+  el.className = 'pickup-pop';
+  el.textContent = '+1';
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  $app.appendChild(el);
+  setTimeout(() => el.remove(), 850);
 }
 
 export function updateHUD() {

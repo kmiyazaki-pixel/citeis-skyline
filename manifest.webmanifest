@@ -1,0 +1,18 @@
+{
+  "name": "こもれび平原 - Komorebi Plains",
+  "short_name": "こもれび平原",
+  "description": "プロシージャル生成の3Dオープンワールドを歩いてクリスタルを集める探索ゲーム。",
+  "start_url": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0d1430",
+  "theme_color": "#0d1430",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='512' height='512'%3E%3Crect width='512' height='512' fill='%230d1430'/%3E%3Ctext x='256' y='360' font-size='320' text-anchor='middle'%3E🌿%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

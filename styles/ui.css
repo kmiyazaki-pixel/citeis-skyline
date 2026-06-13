@@ -169,3 +169,26 @@
 }
 
 #errToast.visible { display: block; }
+
+/* ========= クリスタル取得「+1」ポップ ========= */
+.pickup-pop {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-weight: 900;
+  font-size: 22px;
+  color: #aef0ff;
+  text-shadow: 0 0 8px rgba(95, 199, 232, 0.9), 0 2px 3px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  z-index: 15;
+  animation: popUp 0.85s ease-out forwards;
+}
+
+@keyframes popUp {
+  0%   { opacity: 0; transform: translate(-50%, -40%) scale(0.6); }
+  20%  { opacity: 1; transform: translate(-50%, -60%) scale(1.1); }
+  100% { opacity: 0; transform: translate(-50%, -150%) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pickup-pop { animation-duration: 0.4s; }
+}

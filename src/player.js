@@ -7,13 +7,27 @@
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { state } from './state.js';
-import { scene, camera } from './engine.js';
+import { scene, camera, reducedMotion } from './engine.js';
 import { heightAt } from './world.js';
-import { playJump } from './audio.js';
+import { playJump, playStep, playLand, playSplash } from './audio.js';
 
 let avatar = null;
 const parts = {};
 let walkPhase = 0;
+
+// カメラの手触り用 (遅延追従・着地沈み込み・FOVキック)
+const _camPos = new THREE.Vector3();
+let camInit = false;
+let landDip = 0;       // 現在の沈み込み量 (着地で増え、徐々に戻る)
+let wasOnGround = true;
+let prevStepIdx = 0;   // 足音トリガ用 (歩行位相の半周ごと)
+let prevInWater = false;
+
+function terrainKind(p) {
+  if (p.pos.y > 11.5) return 'snow';
+  if (p.pos.y < CONFIG.WATER_LEVEL + 0.8) return 'sand';
+  return 'grass';
+}
 
 function boxMesh(w, h, d, color) {
   const m = new THREE.Mesh(
@@ -110,6 +124,7 @@ export function updatePlayer(dt) {
   // --- 重力と接地 ---
   p.vel.y -= P.GRAVITY * dt;
   p.pos.y += p.vel.y * dt;
+  const fallSpeed = -p.vel.y; // 着地衝撃の判定用 (0でクリアされる前に記録)
   const ground = heightAt(p.pos.x, p.pos.z);
   if (p.pos.y <= ground) {
     p.pos.y = ground;
@@ -162,19 +177,60 @@ export function updatePlayer(dt) {
   avatar.position.set(p.pos.x, p.pos.y, p.pos.z);
   avatar.rotation.y = p.avatarYaw;
 
-  updateCamera();
+  // 足音: 歩行位相が半周するごとに1歩 (接地・移動中・非水中のみ)
+  const stepIdx = Math.floor(walkPhase / Math.PI);
+  if (stepIdx !== prevStepIdx) {
+    if (moving && p.onGround && !inWater) playStep(terrainKind(p));
+    prevStepIdx = stepIdx;
+  }
+
+  // 着地の検出 → カメラ沈み込み + 着地音 (落下速度に比例)
+  if (!wasOnGround && p.onGround && fallSpeed > 2) {
+    landDip = Math.min(P.LAND_DIP, fallSpeed * 0.05);
+    if (inWater) playSplash(); else playLand();
+  }
+  wasOnGround = p.onGround;
+
+  // 水に入った瞬間の水しぶき
+  if (inWater && !prevInWater) playSplash();
+  prevInWater = inWater;
+  landDip = Math.max(0, landDip - landDip * P.LAND_DIP_RECOVER * dt);
+
+  // ダッシュ中は FOV を広げてスピード感を出す (視差軽減設定では無効)
+  const fovTarget = (!reducedMotion && inp.running && moving) ? P.FOV_DASH : P.FOV_BASE;
+  camera.fov += (fovTarget - camera.fov) * Math.min(1, P.FOV_LERP * dt);
+  camera.updateProjectionMatrix();
+
+  updateCamera(dt);
 }
 
-function updateCamera() {
+// タイトル画面: ゆっくり旋回してワールドを見せる
+export function updateTitleCamera(dt) {
+  state.player.yaw += dt * 0.12;
+  updateCamera(dt);
+}
+
+function updateCamera(dt) {
   const P = CONFIG.PLAYER;
   const p = state.player;
   const cosP = Math.cos(p.pitch);
   let cx = p.pos.x + Math.sin(p.yaw) * P.CAM_DISTANCE * cosP;
   let cz = p.pos.z + Math.cos(p.yaw) * P.CAM_DISTANCE * cosP;
-  let cy = p.pos.y + P.CAM_HEIGHT + Math.sin(p.pitch) * P.CAM_DISTANCE;
+  let cy = p.pos.y + P.CAM_HEIGHT + Math.sin(p.pitch) * P.CAM_DISTANCE - landDip;
   // カメラが地形にめり込まないように
   const camGround = heightAt(cx, cz) + 0.5;
   if (cy < camGround) cy = camGround;
-  camera.position.set(cx, cy, cz);
-  camera.lookAt(p.pos.x, p.pos.y + 1.4, p.pos.z);
+
+  // 目標位置へ遅延追従 (初回はスナップ)
+  if (!camInit || dt === undefined) {
+    _camPos.set(cx, cy, cz);
+    camInit = true;
+  } else {
+    const k = Math.min(1, P.CAM_LERP * dt);
+    _camPos.x += (cx - _camPos.x) * k;
+    _camPos.y += (cy - _camPos.y) * k;
+    _camPos.z += (cz - _camPos.z) * k;
+  }
+  camera.position.copy(_camPos);
+  camera.lookAt(p.pos.x, p.pos.y + 1.4 - landDip * 0.5, p.pos.z);
 }

@@ -40,22 +40,57 @@ const GEO = {
   crystal: new THREE.OctahedronGeometry(0.42),
 };
 
+// 風揺れ用の共有時間 uniform (updateWorld が毎フレーム更新)
+const windUniforms = { uTime: { value: 0 } };
+
+// 葉/花のマテリアルにシェーダ注入で風揺れを足す。
+// インスタンスのワールド位置 (instanceMatrix の平行移動成分) で位相をずらし、
+// 頂点の高さ (上ほど大きく) に応じて横に揺らす。幹は揺らさない
+function applyWind(material, amplitude) {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = windUniforms.uTime;
+    shader.vertexShader = 'uniform float uTime;\n' + shader.vertexShader;
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+      #ifdef USE_INSTANCING
+        float wOx = instanceMatrix[3][0];
+        float wOz = instanceMatrix[3][2];
+      #else
+        float wOx = 0.0;
+        float wOz = 0.0;
+      #endif
+      float wTop = clamp(position.y * 0.5 + 0.5, 0.0, 1.0);
+      float wSway = sin(uTime * 1.6 + wOx * 0.35 + wOz * 0.35) * ${amplitude.toFixed(3)};
+      transformed.x += wSway * wTop;
+      transformed.z += cos(uTime * 1.3 + wOx * 0.3) * ${(amplitude * 0.5).toFixed(3)} * wTop;`
+    );
+  };
+}
+
 const MAT = {
-  terrain: new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }),
-  trunk: new THREE.MeshLambertMaterial({ color: 0x6b4a2e, flatShading: true }),
-  pine: new THREE.MeshLambertMaterial({ color: 0x2e6b3e, flatShading: true }),
-  leaf: new THREE.MeshLambertMaterial({ color: 0x55a04f, flatShading: true }),
-  sakura: new THREE.MeshLambertMaterial({ color: 0xf4b6c8, flatShading: true }),
-  rock: new THREE.MeshLambertMaterial({ color: 0x8d8577, flatShading: true }),
-  flower: new THREE.MeshLambertMaterial({ color: 0xffffff }),
-  crystal: new THREE.MeshLambertMaterial({
-    color: 0x9ff0ff, emissive: 0x19c8e8, emissiveIntensity: 0.8,
-    transparent: true, opacity: 0.92,
+  terrain: new THREE.MeshStandardMaterial({
+    vertexColors: true, flatShading: true, roughness: 0.95, metalness: 0,
   }),
-  water: new THREE.MeshLambertMaterial({
+  trunk: new THREE.MeshStandardMaterial({ color: 0x6b4a2e, flatShading: true, roughness: 0.9 }),
+  pine: new THREE.MeshStandardMaterial({ color: 0x2e6b3e, flatShading: true, roughness: 0.85 }),
+  leaf: new THREE.MeshStandardMaterial({ color: 0x55a04f, flatShading: true, roughness: 0.85 }),
+  sakura: new THREE.MeshStandardMaterial({ color: 0xf4b6c8, flatShading: true, roughness: 0.85 }),
+  rock: new THREE.MeshStandardMaterial({ color: 0x8d8577, flatShading: true, roughness: 0.95 }),
+  flower: new THREE.MeshStandardMaterial({ roughness: 0.7 }),
+  crystal: new THREE.MeshStandardMaterial({
+    color: 0x9ff0ff, emissive: 0x2ad6f0, emissiveIntensity: 1.6,
+    roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.92,
+  }),
+  water: new THREE.MeshStandardMaterial({
     color: 0x2f7fae, transparent: true, opacity: 0.72,
+    roughness: 0.25, metalness: 0.15,
   }),
 };
+applyWind(MAT.pine, 0.18);
+applyWind(MAT.leaf, 0.22);
+applyWind(MAT.sakura, 0.22);
+applyWind(MAT.flower, 0.05);
 
 const COL = {
   sand: new THREE.Color('#e7d9a8'),
@@ -298,6 +333,7 @@ let lastPcz = Infinity;
 
 export function updateWorld(dt, playerPos) {
   elapsed += dt;
+  windUniforms.uTime.value = elapsed;
 
   // チャンクの読み込み / 破棄 (スキャンは境界をまたいだ時だけ)
   const pcx = Math.floor(playerPos.x / SIZE);
@@ -338,20 +374,36 @@ export function updateWorld(dt, playerPos) {
     water.position.y = CONFIG.WATER_LEVEL + Math.sin(elapsed * 0.8) * 0.06;
   }
 
-  // クリスタルのアニメ + 取得判定
-  let picked = 0;
+  // クリスタルのアニメ + 吸い寄せ + 取得判定
+  //   戻り値は取得したクリスタルのワールド座標の配列 ("+1" 演出用)
+  const picked = [];
+  const magnet2 = CONFIG.MAGNET_DIST * CONFIG.MAGNET_DIST;
+  const pick2 = CONFIG.PICKUP_DIST * CONFIG.PICKUP_DIST;
   for (const chunk of chunks.values()) {
     for (const cr of chunk.crystals) {
       if (!cr.mesh.parent) continue;
       cr.mesh.rotation.y += dt * 2;
-      cr.mesh.position.y = cr.baseY + Math.sin(elapsed * 2 + cr.phase) * 0.18;
-      const dx = cr.mesh.position.x - playerPos.x;
-      const dy = cr.mesh.position.y - (playerPos.y + 1);
-      const dz = cr.mesh.position.z - playerPos.z;
-      if (dx * dx + dy * dy + dz * dz < CONFIG.PICKUP_DIST * CONFIG.PICKUP_DIST) {
+      const tx = playerPos.x;
+      const ty = playerPos.y + 1;
+      const tz = playerPos.z;
+      const dx = cr.mesh.position.x - tx;
+      const dy = (cr.baseY + Math.sin(elapsed * 2 + cr.phase) * 0.18) - ty;
+      const dz = cr.mesh.position.z - tz;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < magnet2) {
+        // プレイヤーへ吸い寄せ (近いほど速く)
+        const k = Math.min(1, CONFIG.MAGNET_SPEED * dt * (1.2 - Math.sqrt(d2) / CONFIG.MAGNET_DIST));
+        cr.mesh.position.x += (tx - cr.mesh.position.x) * k;
+        cr.mesh.position.y += (ty - cr.mesh.position.y) * k;
+        cr.mesh.position.z += (tz - cr.mesh.position.z) * k;
+      } else {
+        // 通常は浮遊アニメ
+        cr.mesh.position.y = cr.baseY + Math.sin(elapsed * 2 + cr.phase) * 0.18;
+      }
+      if (d2 < pick2) {
+        picked.push({ x: cr.mesh.position.x, y: cr.mesh.position.y, z: cr.mesh.position.z });
         chunk.group.remove(cr.mesh);
         collectedCrystals.add(cr.key);
-        picked++;
       }
     }
   }

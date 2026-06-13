@@ -1,9 +1,14 @@
 // =====================================================
 //  エンジン - Three.js の renderer / scene / camera / light を
 //  一箇所で生成して各モジュールに提供する
+//  描画は EffectComposer 経由 (ACESトーンマップ + Bloom)
 // =====================================================
 
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 export const isMobile = /Mobi|Android/i.test(navigator.userAgent);
 // 主ポインタが粗い (指) 端末のみタッチ扱い。
@@ -11,11 +16,18 @@ export const isMobile = /Mobi|Android/i.test(navigator.userAgent);
 export const isTouch = window.matchMedia
   ? window.matchMedia('(pointer: coarse)').matches
   : navigator.maxTouchPoints > 0;
+// 「視差効果を減らす」設定。揺れ系の演出を控えめにする
+export const reducedMotion = window.matchMedia
+  ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  : false;
 
 export let renderer = null;
 export let scene = null;
 export let camera = null;
 export const lights = {};
+
+let composer = null;
+let bloomPass = null;
 
 export function setupEngine(canvas) {
   renderer = new THREE.WebGLRenderer({
@@ -26,6 +38,9 @@ export function setupEngine(canvas) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = !isMobile; // モバイルは影なしで軽量化
   renderer.shadowMap.type = THREE.PCFShadowMap;
+  // ACES フィルミックトーンマップで階調を映画的に (OutputPass が適用)
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
 
   canvas.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
@@ -45,7 +60,7 @@ export function setupEngine(canvas) {
   lights.hemi = new THREE.HemisphereLight(0xbfe8ff, 0x4a5c34, 0.5);
   scene.add(lights.hemi);
 
-  lights.sun = new THREE.DirectionalLight(0xfff2d0, 1.0);
+  lights.sun = new THREE.DirectionalLight(0xfff2d0, 1.1);
   lights.sun.castShadow = !isMobile;
   lights.sun.shadow.mapSize.set(1024, 1024);
   const d = 60; // 影はプレイヤー周辺のみ (sky.js が毎フレーム追従させる)
@@ -59,11 +74,29 @@ export function setupEngine(canvas) {
   scene.add(lights.sun);
   scene.add(lights.sun.target);
 
+  // --- ポストプロセス (Bloom) ---
+  //   主役のクリスタルと太陽が滲んで光る。重いライトを足さずに発光感を得る
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(1, 1),
+    isMobile ? 0.45 : 0.6, // strength
+    0.5,                   // radius
+    0.82                   // threshold (これ以上明るい所だけ滲む)
+  );
+  composer.addPass(bloomPass);
+  composer.addPass(new OutputPass()); // トーンマップ + 色空間変換
+
   resize(canvas);
   window.addEventListener('resize', () => resize(canvas));
   if (typeof ResizeObserver !== 'undefined') {
     new ResizeObserver(() => resize(canvas)).observe(canvas);
   }
+}
+
+// main.js のゲームループから毎フレーム呼ぶ描画関数
+export function renderFrame() {
+  composer.render();
 }
 
 function resize(canvas) {
@@ -72,4 +105,10 @@ function resize(canvas) {
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
+  if (composer) {
+    // モバイルは Bloom を半解像度にして負荷半減
+    const scale = isMobile ? 0.5 : 1;
+    composer.setSize(w, h);
+    composer.setPixelRatio(renderer.getPixelRatio() * scale);
+  }
 }
