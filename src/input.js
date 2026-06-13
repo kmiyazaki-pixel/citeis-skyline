@@ -8,6 +8,7 @@
 import { state } from './state.js';
 import { isTouch } from './engine.js';
 import { togglePause } from './hud.js';
+import { toggleBuildMode, placeStructure, isBuildMode } from './build.js';
 
 const keys = new Set();
 let dragging = false;
@@ -26,6 +27,8 @@ export function setupInput(canvas) {
       e.preventDefault();
     }
     if (e.code === 'Escape') { togglePause(); return; }
+    if (e.code === 'KeyB' && state.started) { toggleBuildMode(); return; }
+    if (e.code === 'KeyE' && isBuildMode()) { placeStructure(); return; }
     if (e.code === 'Space' && !keys.has('Space') && state.started) {
       state.input.jumpQueued = true;
       state.input.jumpHeld = true;
@@ -68,6 +71,7 @@ export function setupInput(canvas) {
   // タッチ端末では canvas touchstart の preventDefault が click を抑止するので無害
   canvas.addEventListener('click', (e) => {
     if (Math.hypot(e.clientX - downX, e.clientY - downY) > 4) return; // ドラッグだった
+    if (isBuildMode()) { placeStructure(); return; } // ビルド中のクリックは設置
     if (state.started && document.pointerLockElement !== canvas) {
       try {
         const r = canvas.requestPointerLock();

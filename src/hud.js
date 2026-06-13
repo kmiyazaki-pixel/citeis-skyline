@@ -10,6 +10,7 @@ import { hasSave, loadAndApply, clearSave, save } from './save.js';
 import { saveSettings, applySettings } from './settings.js';
 import { nearestCrystal } from './world.js';
 import { CONFIG } from './config.js';
+import { toggleBuildMode, placeStructure } from './build.js';
 
 const $crystal = document.getElementById('crystalCount');
 const $clock = document.getElementById('clock');
@@ -24,6 +25,9 @@ const $objArrow = document.getElementById('objArrow');
 const $objDist = document.getElementById('objDist');
 const $staminaWrap = document.getElementById('staminaWrap');
 const $staminaBar = document.getElementById('staminaBar');
+const $buildBtn = document.getElementById('buildBtn');
+const $placeBtn = document.getElementById('placeBtn');
+const $buildHint = document.getElementById('buildHint');
 
 const _proj = new THREE.Vector3();
 
@@ -121,6 +125,11 @@ export function setupPause() {
     : 'WASD/矢印: 移動 ・ ドラッグ/ロック: 視点 ・ Space: ジャンプ(長押しでグライド) ・ Shift: ダッシュ ・ Esc: 一時停止';
 
   document.getElementById('pauseBtn').addEventListener('click', () => togglePause());
+  // 拠点づくり
+  $buildBtn.addEventListener('click', () => toggleBuildMode());
+  $buildBtn.addEventListener('touchend', (e) => { e.preventDefault(); toggleBuildMode(); }, { passive: false });
+  $placeBtn.addEventListener('click', () => placeStructure());
+  $placeBtn.addEventListener('touchend', (e) => { e.preventDefault(); placeStructure(); }, { passive: false });
   document.getElementById('resumeBtn').addEventListener('click', () => setPaused(false));
   document.getElementById('toTitleBtn').addEventListener('click', () => {
     save();
@@ -174,4 +183,16 @@ export function updateHUD() {
   const st = state.player.stamina / CONFIG.PLAYER.STAMINA_MAX;
   $staminaBar.style.width = (st * 100) + '%';
   $staminaWrap.classList.toggle('show', st < 0.999);
+
+  // 拠点づくりモードの表示
+  $buildBtn.classList.toggle('active', state.buildMode);
+  $placeBtn.classList.toggle('hidden', !state.buildMode);
+  $buildHint.classList.toggle('hidden', !state.buildMode);
+  if (state.buildMode) {
+    const cost = CONFIG.BUILD.KITS.foundation.cost;
+    const ok = state.crystals >= cost;
+    $buildHint.textContent = ok
+      ? `土台を設置 (資材 ${cost}) ・ 手持ち 💎${state.crystals}`
+      : `資材が足りません (必要 ${cost} / 手持ち ${state.crystals})`;
+  }
 }

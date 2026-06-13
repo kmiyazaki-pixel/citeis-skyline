@@ -7,8 +7,14 @@ import { CONFIG } from './config.js';
 export const state = {
   started: false,                  // タイトル画面を抜けたか
   paused: false,                   // 一時停止 (ループは dt=0 で凍結)
+  buildMode: false,                // 拠点づくりモード
   timeOfDay: CONFIG.DAY.START,     // 0..1 (0=深夜0時, 0.5=正午)
-  crystals: 0,                     // 収集したクリスタル数
+  crystals: 0,                     // 手持ちの資材 (建設で消費)
+  crystalsTotal: 0,                // 累計収集数 (能力解放の判定用、消費されない)
+
+  // 設置した拠点の構造物 (プレイヤーデータ。地形ジオメトリには焼かない)
+  //   { id, type, x, z, rot }
+  structures: [],
 
   // 大気 (sky.js が毎フレーム書き、空ドーム/水/草/ライト/将来の建物が参照)
   sky: {

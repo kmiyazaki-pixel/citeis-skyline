@@ -15,6 +15,8 @@ import { playPickup, updateAmbience, updateMusic } from './audio.js';
 import { CONFIG } from './config.js';
 import { save } from './save.js';
 import { loadSettings, applySettings } from './settings.js';
+import { setupBuild, updateBuild } from './build.js';
+import { spawnAllStructures } from './structures.js';
 
 // ---------- エラーを画面に出す (スマホでのデバッグ補助) ----------
 const $errToast = document.getElementById('errToast');
@@ -34,19 +36,19 @@ let timeoutId = 0;
 let lastNow = 0;
 let autosaveTimer = 0;
 
-// クリスタル収集数に応じて能力を解放する
+// クリスタル累計収集数に応じて能力を解放する (消費される手持ちとは別)
 function checkProgress() {
   const a = state.abilities;
   const P = CONFIG.PROGRESSION;
-  if (!a.doubleJump && state.crystals >= P.DOUBLE_JUMP) {
+  if (!a.doubleJump && state.crystalsTotal >= P.DOUBLE_JUMP) {
     a.doubleJump = true;
     showBanner('💎 2段ジャンプ 解放！ (空中でもう一度ジャンプ)');
   }
-  if (!a.glide && state.crystals >= P.GLIDE) {
+  if (!a.glide && state.crystalsTotal >= P.GLIDE) {
     a.glide = true;
     showBanner('💎 グライド 解放！ (ジャンプ長押しでゆっくり降下)');
   }
-  if (!a.swim && state.crystals >= P.SWIM) {
+  if (!a.swim && state.crystalsTotal >= P.SWIM) {
     a.swim = true;
     showBanner('💎 泳ぎ 解放！ (深い水で泳げる)');
   }
@@ -77,13 +79,15 @@ function frame(now) {
     updatePlayer(dt);
     const picked = updateWorld(dt, state.player.pos);
     if (picked.length > 0) {
-      state.crystals += picked.length;
+      state.crystals += picked.length;      // 手持ち資材
+      state.crystalsTotal += picked.length; // 累計 (能力解放用)
       playPickup();
       for (const pos of picked) showPickupPopup(pos);
       checkProgress();
     }
     updateCreatures(dt, state.player.pos);
     updateVfx(dt, state.player.pos);
+    updateBuild(dt);
     updateAmbience(dt, state.timeOfDay);
     updateMusic(dt, state.timeOfDay);
     updateHUD();
@@ -108,6 +112,8 @@ function init() {
   initWorld(state.player.pos.x, state.player.pos.z);
   setupCreatures(state.player.pos.x, state.player.pos.z);
   setupVfx();
+  setupBuild();
+  spawnAllStructures(); // 新規は空、つづきからは save が別途復元
   setupInput(canvas);
   setupHUD();
   setupPause();
