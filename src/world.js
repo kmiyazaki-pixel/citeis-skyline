@@ -42,6 +42,18 @@ const GEO = {
   flower: new THREE.SphereGeometry(0.1, 5, 4),
   crystal: new THREE.OctahedronGeometry(0.42),
   pillar: new THREE.CylinderGeometry(0.5, 0.8, 34, 8),
+  grass: (() => {
+    // テーパー草ブレード (2三角・先細り)
+    const g = new THREE.BufferGeometry();
+    const v = new Float32Array([
+      -0.05, 0, 0,  0.05, 0, 0,  -0.03, 0.28, 0,
+       0.05, 0, 0,  0.03, 0.28, 0, -0.03, 0.28, 0,
+       -0.03, 0.28, 0, 0.03, 0.28, 0, 0, 0.5, 0,
+    ]);
+    g.setAttribute('position', new THREE.BufferAttribute(v, 3));
+    g.computeVertexNormals();
+    return g;
+  })(),
 };
 
 // 風揺れ用の共有時間 uniform (updateWorld が毎フレーム更新)
@@ -82,6 +94,9 @@ const MAT = {
   sakura: new THREE.MeshStandardMaterial({ color: 0xf4b6c8, flatShading: true, roughness: 0.85 }),
   rock: new THREE.MeshStandardMaterial({ color: 0x8d8577, flatShading: true, roughness: 0.95 }),
   flower: new THREE.MeshStandardMaterial({ roughness: 0.7 }),
+  grass: new THREE.MeshStandardMaterial({
+    color: 0xffffff, side: THREE.DoubleSide, roughness: 0.9, flatShading: true,
+  }),
   crystal: new THREE.MeshStandardMaterial({
     color: 0x9ff0ff, emissive: 0x2ad6f0, emissiveIntensity: 1.6,
     roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.92,
@@ -140,6 +155,7 @@ applyWind(MAT.pine, 0.18);
 applyWind(MAT.leaf, 0.22);
 applyWind(MAT.sakura, 0.22);
 applyWind(MAT.flower, 0.05);
+applyWind(MAT.grass, 0.14);
 
 const COL = {
   sand: new THREE.Color('#e7d9a8'),
@@ -476,9 +492,45 @@ function disposeChunk(key) {
   const chunk = chunks.get(key);
   if (!chunk) return;
   scene.remove(chunk.group);
+  if (chunk.grass) { scene.remove(chunk.grass); chunk.grass.dispose(); chunk.grass = null; }
   for (const g of chunk.uniqueGeos) g.dispose();
   for (const im of chunk.ims) im.dispose(); // instanceMatrix 等のバッファ解放 (共有 geo は保持)
   chunks.delete(key);
+}
+
+// 草ブレード (近傍チャンクのみ。重いので1フレーム1チャンクまで)
+const _gcol = new THREE.Color();
+function buildGrass(chunk) {
+  const { cx, cz } = chunk;
+  const seed = CONFIG.TERRAIN.SEED;
+  const max = isMobile ? Math.floor(CONFIG.SCENERY.GRASS_PER_CHUNK * 0.4) : CONFIG.SCENERY.GRASS_PER_CHUNK;
+  const im = new THREE.InstancedMesh(GEO.grass, MAT.grass, max);
+  im.castShadow = false;
+  im.receiveShadow = false;
+  im.frustumCulled = false;
+  let n = 0;
+  for (let i = 0; i < max; i++) {
+    const wx = cx * SIZE + hash2(cx * 311 + i * 2, cz * 313 + i, seed + 401) * SIZE;
+    const wz = cz * SIZE + hash2(cx * 317 + i, cz * 331 + i * 3, seed + 409) * SIZE;
+    const h = heightAt(wx, wz);
+    if (h < CONFIG.WATER_LEVEL + 0.5 || h > 11) continue;
+    const e = 0.9;
+    const slope = Math.abs(heightAt(wx + e, wz) - h) + Math.abs(heightAt(wx, wz + e) - h);
+    if (slope > 1.6) continue;
+    _dummy.position.set(wx, h, wz);
+    _dummy.scale.set(0.8 + hash2(i, 7, seed) * 0.7, 0.7 + hash2(i, 9, seed) * 0.8, 1);
+    _dummy.rotation.set(0, hash2(i, 11, seed) * Math.PI, 0);
+    _dummy.updateMatrix();
+    im.setMatrixAt(n, _dummy.matrix);
+    _gcol.copy(COL.grassA).lerp(COL.grassB, hash2(i, 13, seed)).multiplyScalar(0.7 + hash2(i, 15, seed) * 0.5);
+    im.setColorAt(n, _gcol);
+    n++;
+  }
+  im.count = n;
+  im.instanceMatrix.needsUpdate = true;
+  if (im.instanceColor) im.instanceColor.needsUpdate = true;
+  scene.add(im);
+  chunk.grass = im;
 }
 
 // ---------- 目標トラッカー用: 最寄りの未取得クリスタル ----------
@@ -525,6 +577,8 @@ let lastPcz = Infinity;
 export function updateWorld(dt, playerPos) {
   elapsed += dt;
   windUniforms.uTime.value = elapsed;
+  // クリスタルの発光を脈動させる (共有マテリアル1行、Bloom で煌めく)
+  MAT.crystal.emissiveIntensity = 1.3 + Math.sin(elapsed * 4) * 0.5;
 
   // チャンクの読み込み / 破棄 (スキャンは境界をまたいだ時だけ)
   const pcx = Math.floor(playerPos.x / SIZE);
@@ -556,6 +610,20 @@ export function updateWorld(dt, playerPos) {
     if (Math.abs(cx - pcx) > R || Math.abs(cz - pcz) > R) continue;
     buildChunk(cx, cz);
     built++;
+  }
+
+  // 草: 近傍 (dist<=1) のチャンクだけ生成、離れたら破棄。1フレーム1チャンク
+  let grewGrass = false;
+  for (const chunk of chunks.values()) {
+    const near = Math.abs(chunk.cx - pcx) <= 1 && Math.abs(chunk.cz - pcz) <= 1;
+    if (near && !chunk.grass && !grewGrass) {
+      buildGrass(chunk);
+      grewGrass = true;
+    } else if (!near && chunk.grass) {
+      scene.remove(chunk.grass);
+      chunk.grass.dispose();
+      chunk.grass = null;
+    }
   }
 
   // 水面はプレイヤーに追従 (波・フレネル・きらめきは GPU シェーダ)

@@ -65,6 +65,7 @@ export const CONFIG = {
     ROCKS_PER_CHUNK: 7,
     FLOWERS_PER_CHUNK: 34,
     CRYSTALS_PER_CHUNK: 2,
+    GRASS_PER_CHUNK: 3200,  // 草ブレード (近傍チャンクのみ生成)
     PINE_RATIO: 0.45,    // 木のうち松の割合
     SAKURA_RATIO: 0.12,  // 木のうち桜の割合
     TREE_MAX_HEIGHT: 11, // この標高より上に木は生えない

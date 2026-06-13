@@ -9,6 +9,7 @@ import { setupPlayer, updatePlayer, updateTitleCamera } from './player.js';
 import { setupInput } from './input.js';
 import { setupSky, updateSky } from './sky.js';
 import { setupCreatures, updateCreatures } from './creatures.js';
+import { setupVfx, updateVfx } from './vfx.js';
 import { setupHUD, updateHUD, showPickupPopup, showBanner, setupPause } from './hud.js';
 import { playPickup, updateAmbience, updateMusic } from './audio.js';
 import { CONFIG } from './config.js';
@@ -82,6 +83,7 @@ function frame(now) {
       checkProgress();
     }
     updateCreatures(dt, state.player.pos);
+    updateVfx(dt, state.player.pos);
     updateAmbience(dt, state.timeOfDay);
     updateMusic(dt, state.timeOfDay);
     updateHUD();
@@ -105,6 +107,7 @@ function init() {
   setupPlayer();              // スポーン地点を確定 (world は heightAt だけ使う)
   initWorld(state.player.pos.x, state.player.pos.z);
   setupCreatures(state.player.pos.x, state.player.pos.z);
+  setupVfx();
   setupInput(canvas);
   setupHUD();
   setupPause();
