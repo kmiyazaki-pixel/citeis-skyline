@@ -125,23 +125,42 @@ export function initWorld(px, pz) {
   water.position.y = CONFIG.WATER_LEVEL;
   scene.add(water);
 
-  // 遠景の山リング (霧に溶けるスカイライン。プレイヤー追従)
-  const ringGeo = new THREE.CylinderGeometry(200, 220, 70, 80, 1, true);
-  const rpos = ringGeo.attributes.position;
-  for (let i = 0; i < rpos.count; i++) {
-    if (rpos.getY(i) > 0) {
-      // 上端をギザギザにして山の稜線に
-      const ang = Math.atan2(rpos.getZ(i), rpos.getX(i));
-      const n = fbm((ang + 4) * 1.6, 0.5, 3, 2.0, 0.5, 99) ;
-      rpos.setY(i, rpos.getY(i) + n * 46 - 8);
+  // 遠景の山 (3重リッジ。遠いほど霞ませて大気遠近、視差で奥行き)
+  mountains = new THREE.Group();
+  const ROCK = new THREE.Color(0x6a7f96);
+  const HAZE = new THREE.Color(0xb6d2e4);
+  const SNOW = new THREE.Color(0xeaf2f8);
+  const rings = [
+    { rIn: 165, rOut: 185, h: 60, haze: 0.25, snowY: 999, seed: 99 },
+    { rIn: 210, rOut: 232, h: 80, haze: 0.50, snowY: 58, seed: 131 },
+    { rIn: 262, rOut: 286, h: 104, haze: 0.74, snowY: 64, seed: 167 },
+  ];
+  for (const R0 of rings) {
+    const geo = new THREE.CylinderGeometry(R0.rIn, R0.rOut, R0.h, 96, 1, true);
+    const rp = geo.attributes.position;
+    const cols = new Float32Array(rp.count * 3);
+    const base = ROCK.clone().lerp(HAZE, R0.haze);
+    for (let i = 0; i < rp.count; i++) {
+      let y = rp.getY(i);
+      if (y > 0) {
+        const ang = Math.atan2(rp.getZ(i), rp.getX(i));
+        const n = fbm((ang + 4) * 2.2, 0.5, 4, 2.0, 0.5, R0.seed);
+        y = y + n * (R0.h * 0.7) - R0.h * 0.18;
+        rp.setY(i, y);
+      }
+      // 雪冠 (高い頂のみ)
+      _c.copy(base);
+      if (y > R0.snowY) _c.lerp(SNOW, Math.min(1, (y - R0.snowY) / 24));
+      cols[i * 3] = _c.r; cols[i * 3 + 1] = _c.g; cols[i * 3 + 2] = _c.b;
     }
+    geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 1, flatShading: true, side: THREE.BackSide, fog: false,
+    }));
+    mountains.add(mesh);
   }
-  ringGeo.computeVertexNormals();
-  mountains = new THREE.Mesh(
-    ringGeo,
-    new THREE.MeshStandardMaterial({ color: 0x6a7f96, roughness: 1, flatShading: true, side: THREE.BackSide })
-  );
-  mountains.position.y = 6;
+  mountains.position.y = 4;
   scene.add(mountains);
 
   // スポーン周辺 3×3 は同期生成 (最初の景色が空にならないように)

@@ -26,8 +26,8 @@ export let scene = null;
 export let camera = null;
 export const lights = {};
 
-let composer = null;
-let bloomPass = null;
+export let composer = null;
+export let bloomPass = null;
 
 export function setupEngine(canvas) {
   renderer = new THREE.WebGLRenderer({
@@ -73,6 +73,11 @@ export function setupEngine(canvas) {
   lights.sun.shadow.bias = -0.0006;
   scene.add(lights.sun);
   scene.add(lights.sun.target);
+
+  // リムライト (太陽の反対側からシルエットを起こす。影は落とさない)
+  lights.rim = new THREE.DirectionalLight(0xbcd4ff, 0.2);
+  scene.add(lights.rim);
+  scene.add(lights.rim.target);
 
   // --- ポストプロセス (Bloom) ---
   //   主役のクリスタルと太陽が滲んで光る。重いライトを足さずに発光感を得る

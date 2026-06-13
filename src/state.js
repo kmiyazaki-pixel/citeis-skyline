@@ -10,6 +10,13 @@ export const state = {
   timeOfDay: CONFIG.DAY.START,     // 0..1 (0=深夜0時, 0.5=正午)
   crystals: 0,                     // 収集したクリスタル数
 
+  // 大気 (sky.js が毎フレーム書き、空ドーム/水/草/ライト/将来の建物が参照)
+  sky: {
+    dayness: 0,                    // 0=夜 .. 1=昼
+    glow: 0,                       // 朝焼け/夕焼けの強さ
+    sunDir: { x: 0, y: 1, z: 0 },  // 太陽方向 (正規化)
+  },
+
   // 解放済みの能力 (クリスタル収集数で解放)
   abilities: {
     doubleJump: false,
