@@ -6,8 +6,8 @@ export const CONFIG = {
   // ワールド (チャンク式ロード)
   WORLD: {
     CHUNK_SIZE: 48,                // 1チャンクの一辺 (ワールド単位)
-    CHUNK_SEGMENTS: 56,            // 地形メッシュの分割数 (高いほど滑らか)
-    CHUNK_SEGMENTS_MOBILE: 36,     // モバイルは控えめ
+    CHUNK_SEGMENTS: 80,            // 地形メッシュの分割数 (高いほど滑らか。草撤去分を回した)
+    CHUNK_SEGMENTS_MOBILE: 48,     // モバイルは控えめ
     VIEW_RADIUS: 2,                // プレイヤー周囲に読み込む半径 (2 → 5×5)
     MAX_CHUNK_BUILDS_PER_FRAME: 2, // 1フレームに生成するチャンク数の上限
   },
@@ -66,7 +66,6 @@ export const CONFIG = {
     ROCKS_PER_CHUNK: 7,
     FLOWERS_PER_CHUNK: 34,
     CRYSTALS_PER_CHUNK: 2,
-    GRASS_PER_CHUNK: 3200,  // 草ブレード (近傍チャンクのみ生成)
     PINE_RATIO: 0.45,    // 木のうち松の割合
     SAKURA_RATIO: 0.12,  // 木のうち桜の割合
     TREE_MAX_HEIGHT: 11, // この標高より上に木は生えない
