@@ -112,7 +112,43 @@
   - [x] LICENSE (MIT) + Three.js 著作権表記
   - [ ] v1.0 スコープ確定 (エンディング条件、操作説明の最終化)
   - [ ] 実機QA (PC60fps / 廉価Android30fps)、ストア梱包、コンテンツ量 ← ユーザー作業
-- 個別の積み残し: バイオーム、祠クエスト、岸の泡
+- [x] **豪華化パス**: 見た目の大幅強化 (制約維持) ← **ここ完了**
+  - グラデ空ドーム + 太陽グロー、3重山リッジ、露出/Bloom昼夜ランプ、リムライト
+  - カラーグレード + ビネット + 微色収差 ShaderPass
+  - 地形の色 richness (連続バンド/谷AO/渚/バイオーム)、シェーダ水面 (フレネル/きらめき)
+  - 草原ブレード (近傍チャンク)、ホタル、クリスタル発光脈動
+  - 留保: 取得バースト・桜びら・花粉・ドリフト雲・複層キャノピー
+- 個別の積み残し: バイオーム地形分け、祠クエスト、岸の泡
+
+## 将来計画: 拠点 / 街の発展 (設計メモ)
+
+オープンワールドに「拠点を作って育てる」要素を後付けする際の設計方針
+(ユーザー要望。多エージェント設計の結論)。**heightAt を地形の唯一の真実に
+保つ**原則は崩さない。
+
+- **データモデル**: クリスタルをソフト通貨化。`state.crystals` は能力解放判定の
+  ため lifetime のまま残し、建設用残高 `state.spent` を新設 (解放しきい値は
+  lifetime、建設は残高から消費)。構造物はプレイヤーデータとして
+  `state.structures = [{ id, type, x, z, rot, level }]` に保持。`y` は
+  `heightAt(x,z)` から導出し、地形ジオメトリには決してベイクしない。斜面は各キットの
+  土台 (薄い Cylinder/Box の skirt) で視覚的に橋渡しし、4隅サンプルの slope 超過で
+  配置拒否 (赤ゴースト)。
+- **新モジュール**:
+  - `structures.js`: プリミティブの建物キット工場 (共有 GEO/MAT 流用の低ポリ)。
+    `spawnInChunk`/`dispose` でチャンクのライフサイクルに乗せ、footprint を
+    `chunk.obstacles` に足して既存 `resolveCollision` ですり抜け防止。
+  - `build.js`: ビルドモード + ゴーストプレビュー (カメラ→地形 raycast で追従、
+    グリッド snap、回転、コスト判定、確定で `state.structures` に push → save、解体)。
+- **MVP (最初に出せる最小)**: 構造物1種「拠点ビーコン/焚き火」(Cylinder +
+  emissive Cone、Bloom グロー、例: 10クリスタル)。最小 build.js (トグル/ゴースト/
+  確定のみ)。`creatures.js` のウサギ徘徊を一般化して flee を外した「村人」を
+  ビーコン近くにスポーンし、`player.js` のボックス人型を流用。「家を建てたら命が宿る」
+  フックをこれだけで提供。
+- **進行**: `CONFIG.TOWN.TIERS` で camp→hamlet→village。各ティアは
+  (spent≥X) && (structureCount≥Y) で解放しビルドメニューに新キットを追加。
+  村人数は cottage 数にスケール。`save.js` は collected と同じ要領で structures を
+  シリアライズし、`loadAndApply` で復元後 `resetChunks`。
+- ファイル境界は壊さず state/save/world/hud/input/creatures/config を拡張のみ。
 
 ## ローカル開発
 
