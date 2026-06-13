@@ -13,7 +13,7 @@ import { scene, isMobile } from './engine.js';
 import { skyUniforms } from './sky.js';
 
 const SIZE = CONFIG.WORLD.CHUNK_SIZE;
-const SEG = CONFIG.WORLD.CHUNK_SEGMENTS;
+const SEG = isMobile ? CONFIG.WORLD.CHUNK_SEGMENTS_MOBILE : CONFIG.WORLD.CHUNK_SEGMENTS;
 const R = CONFIG.WORLD.VIEW_RADIUS;
 
 const chunks = new Map();        // "cx,cz" → { group, uniqueGeos, ims, crystals }
@@ -35,13 +35,13 @@ export function heightAt(x, z) {
 
 // ---------- 共有ジオメトリ / マテリアル ----------
 const GEO = {
-  trunk: new THREE.CylinderGeometry(0.12, 0.18, 1, 6),
-  pine: new THREE.ConeGeometry(0.95, 2.4, 7),
-  leaf: new THREE.SphereGeometry(1.0, 7, 5),
-  rock: new THREE.DodecahedronGeometry(0.7, 0),
-  flower: new THREE.SphereGeometry(0.1, 5, 4),
+  trunk: new THREE.CylinderGeometry(0.12, 0.18, 1, 12),
+  pine: new THREE.ConeGeometry(0.95, 2.4, 16),
+  leaf: new THREE.SphereGeometry(1.0, 16, 12),
+  rock: new THREE.IcosahedronGeometry(0.7, 2),
+  flower: new THREE.SphereGeometry(0.1, 8, 6),
   crystal: new THREE.OctahedronGeometry(0.42),
-  pillar: new THREE.CylinderGeometry(0.5, 0.8, 34, 8),
+  pillar: new THREE.CylinderGeometry(0.5, 0.8, 34, 16),
   grass: (() => {
     // テーパー草ブレード (2三角・先細り)
     const g = new THREE.BufferGeometry();
@@ -86,13 +86,13 @@ function applyWind(material, amplitude) {
 
 const MAT = {
   terrain: new THREE.MeshStandardMaterial({
-    vertexColors: true, flatShading: true, roughness: 0.95, metalness: 0,
+    vertexColors: true, roughness: 0.95, metalness: 0,
   }),
-  trunk: new THREE.MeshStandardMaterial({ color: 0x6b4a2e, flatShading: true, roughness: 0.9 }),
-  pine: new THREE.MeshStandardMaterial({ color: 0x2e6b3e, flatShading: true, roughness: 0.85 }),
-  leaf: new THREE.MeshStandardMaterial({ color: 0x55a04f, flatShading: true, roughness: 0.85 }),
-  sakura: new THREE.MeshStandardMaterial({ color: 0xf4b6c8, flatShading: true, roughness: 0.85 }),
-  rock: new THREE.MeshStandardMaterial({ color: 0x8d8577, flatShading: true, roughness: 0.95 }),
+  trunk: new THREE.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 0.9 }),
+  pine: new THREE.MeshStandardMaterial({ color: 0x2e6b3e, roughness: 0.85 }),
+  leaf: new THREE.MeshStandardMaterial({ color: 0x55a04f, roughness: 0.85 }),
+  sakura: new THREE.MeshStandardMaterial({ color: 0xf4b6c8, roughness: 0.85 }),
+  rock: new THREE.MeshStandardMaterial({ color: 0x8d8577, roughness: 0.95 }),
   flower: new THREE.MeshStandardMaterial({ roughness: 0.7 }),
   grass: new THREE.MeshStandardMaterial({
     color: 0xffffff, side: THREE.DoubleSide, roughness: 0.9, flatShading: true,
@@ -223,7 +223,7 @@ export function initWorld(px, pz) {
     geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
     geo.computeVertexNormals();
     const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-      vertexColors: true, roughness: 1, flatShading: true, side: THREE.BackSide, fog: false,
+      vertexColors: true, roughness: 1, side: THREE.BackSide, fog: false,
     }));
     mountains.add(mesh);
   }
@@ -313,7 +313,7 @@ function buildChunk(cx, cz) {
     colors[i * 3 + 2] = _c.b;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  // flatShading はシェーダ内で面法線を導出するため法線計算は不要
+  geo.computeVertexNormals(); // スムーズシェーディング (面のカクカクを消す)
   const terrain = new THREE.Mesh(geo, MAT.terrain);
   terrain.receiveShadow = true;
   group.add(terrain);

@@ -71,7 +71,7 @@ export function setupEngine(canvas) {
 
   lights.sun = new THREE.DirectionalLight(0xfff2d0, 1.1);
   lights.sun.castShadow = !isMobile;
-  lights.sun.shadow.mapSize.set(1024, 1024);
+  lights.sun.shadow.mapSize.set(isMobile ? 1024 : 2048, isMobile ? 1024 : 2048);
   const d = 60; // 影はプレイヤー周辺のみ (sky.js が毎フレーム追従させる)
   lights.sun.shadow.camera.left = -d;
   lights.sun.shadow.camera.right = d;

@@ -30,21 +30,17 @@ function terrainKind(p) {
   return 'grass';
 }
 
-function boxMesh(w, h, d, color) {
-  const m = new THREE.Mesh(
-    new THREE.BoxGeometry(w, h, d),
-    new THREE.MeshLambertMaterial({ color, flatShading: true })
-  );
-  m.castShadow = true;
-  return m;
+function mat(color) {
+  return new THREE.MeshStandardMaterial({ color, roughness: 0.8 });
 }
 
-// 関節 (pivot) 付きの手足: pivot の位置が付け根、メッシュは下にぶら下がる
-function limb(w, h, d, color, x, y, z) {
+// 関節 (pivot) 付きの手足: pivot が付け根、カプセルが下にぶら下がる
+function limb(r, len, color, x, y) {
   const pivot = new THREE.Group();
-  pivot.position.set(x, y, z);
-  const m = boxMesh(w, h, d, color);
-  m.position.y = -h / 2;
+  pivot.position.set(x, y, 0);
+  const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 10), mat(color));
+  m.position.y = -(len / 2 + r); // 上端を pivot に合わせる
+  m.castShadow = true;
   pivot.add(m);
   return pivot;
 }
@@ -52,22 +48,34 @@ function limb(w, h, d, color, x, y, z) {
 function buildAvatar() {
   const g = new THREE.Group();
 
-  const body = boxMesh(0.5, 0.62, 0.3, '#3aa0c8'); // 服: 水色
-  body.position.y = 0.86;
+  // 胴 (丸みのあるカプセル)
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.38, 5, 14), mat('#3aa0c8'));
+  body.position.y = 0.92;
+  body.scale.z = 0.8;
+  body.castShadow = true;
   g.add(body);
   parts.body = body;
 
-  const head = boxMesh(0.34, 0.32, 0.32, '#f4c9a3'); // 肌
-  head.position.y = 1.34;
+  // 首
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.12, 10), mat('#f4c9a3'));
+  neck.position.y = 1.3;
+  g.add(neck);
+
+  // 頭 (球)
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 20, 16), mat('#f4c9a3'));
+  head.position.y = 1.5;
+  head.castShadow = true;
   g.add(head);
-  const hair = boxMesh(0.36, 0.12, 0.34, '#5a3a22');
-  hair.position.y = 1.52;
+  // 髪 (上半球を少し潰して被せる)
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.215, 20, 16), mat('#5a3a22'));
+  hair.position.y = 1.55;
+  hair.scale.set(1, 0.85, 1);
   g.add(hair);
 
-  parts.armL = limb(0.13, 0.52, 0.16, '#3aa0c8', 0.33, 1.14, 0);
-  parts.armR = limb(0.13, 0.52, 0.16, '#3aa0c8', -0.33, 1.14, 0);
-  parts.legL = limb(0.17, 0.55, 0.2, '#3b4a6b', 0.13, 0.55, 0); // ズボン: 紺
-  parts.legR = limb(0.17, 0.55, 0.2, '#3b4a6b', -0.13, 0.55, 0);
+  parts.armL = limb(0.075, 0.4, '#3aa0c8', 0.3, 1.18);
+  parts.armR = limb(0.075, 0.4, '#3aa0c8', -0.3, 1.18);
+  parts.legL = limb(0.095, 0.42, '#3b4a6b', 0.12, 0.58); // ズボン: 紺
+  parts.legR = limb(0.095, 0.42, '#3b4a6b', -0.12, 0.58);
   g.add(parts.armL, parts.armR, parts.legL, parts.legR);
 
   return g;
