@@ -132,8 +132,8 @@ const MAT = {
       }`,
   }),
   pillar: new THREE.MeshStandardMaterial({
-    color: 0xaef0ff, emissive: 0x6fe0ff, emissiveIntensity: 1.8,
-    transparent: true, opacity: 0.5, fog: false,
+    color: 0xaef0ff, emissive: 0x6fe0ff, emissiveIntensity: 1.0,
+    transparent: true, opacity: 0.4, fog: false,
   }),
 };
 applyWind(MAT.pine, 0.18);

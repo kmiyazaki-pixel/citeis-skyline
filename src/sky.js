@@ -82,7 +82,7 @@ export function setupSky() {
   scene.add(sunSphere);
   moonSphere = new THREE.Mesh(
     new THREE.SphereGeometry(7, 16, 12),
-    new THREE.MeshBasicMaterial({ color: 0xe6ecff, fog: false })
+    new THREE.MeshBasicMaterial({ color: 0x9aa6c8, fog: false }) // 控えめにして白飛び/眩しさを防ぐ
   );
   scene.add(moonSphere);
 
@@ -143,7 +143,7 @@ export function updateSky(dt, playerPos) {
   lights.hemi.intensity = 0.16 + dayness * 0.34;
   _key.copy(KEY_DAY).lerp(KEY_GOLD, glow);     // ゴールデンアワーで暖色キー
   lights.sun.color.copy(_key);
-  lights.rim.intensity = 0.15 + 0.35 * (1 - dayness);
+  lights.rim.intensity = 0.1 + 0.13 * (1 - dayness); // 夜でも控えめ (眩しさ防止)
   lights.rim.position.set(
     playerPos.x - sunDir.x * 120,
     playerPos.y + 60,
@@ -151,9 +151,10 @@ export function updateSky(dt, playerPos) {
   );
   lights.rim.target.position.set(playerPos.x, playerPos.y, playerPos.z);
 
-  // 露出と Bloom しきい値の昼夜ランプ (夕焼けでオーバー露出、夜は滲み強め)
-  renderer.toneMappingExposure = 0.85 + dayness * 0.35 + glow * 0.15;
-  if (bloomPass) bloomPass.threshold = 0.82 - (1 - dayness) * 0.22;
+  // 露出: 夜はしっかり下げて「暗い夜」に (昼夜のコントラストを強く)
+  renderer.toneMappingExposure = 0.5 + dayness * 0.7 + glow * 0.15;
+  // Bloom しきい値は一定 (夜に下げると画面全体が滲んで周りが見えなくなる)
+  if (bloomPass) bloomPass.threshold = 0.85;
   gradeUniforms.uDayness.value = dayness; // カラーグレードのスプリットトーン
 
   // 影とライトの向きはプレイヤー追従
