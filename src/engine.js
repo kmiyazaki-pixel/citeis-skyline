@@ -9,6 +9,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
 export const isMobile = /Mobi|Android/i.test(navigator.userAgent);
 // 主ポインタが粗い (指) 端末のみタッチ扱い。
@@ -28,6 +29,14 @@ export const lights = {};
 
 export let composer = null;
 export let bloomPass = null;
+// カラーグレード/ビネットの調整値 (sky.js が uDayness を毎フレーム更新)
+export const gradeUniforms = {
+  tDiffuse:  { value: null },
+  uDayness:  { value: 1.0 },
+  uSat:      { value: 1.16 },
+  uVignette: { value: 0.85 },
+  uCA:       { value: 0.0016 },
+};
 
 export function setupEngine(canvas) {
   renderer = new THREE.WebGLRenderer({
@@ -91,6 +100,46 @@ export function setupEngine(canvas) {
   );
   composer.addPass(bloomPass);
   composer.addPass(new OutputPass()); // トーンマップ + 色空間変換
+
+  // カラーグレード + ビネット + 微色収差 (OutputPass の後 = sRGB 空間)
+  const caScale = isMobile ? 0.4 : 1.0;
+  const gradePass = new ShaderPass({
+    uniforms: gradeUniforms,
+    vertexShader: `
+      varying vec2 vUv;
+      void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `
+      uniform sampler2D tDiffuse;
+      uniform float uDayness, uSat, uVignette, uCA;
+      varying vec2 vUv;
+      void main() {
+        vec2 dir = vUv - 0.5;
+        // 微色収差 (端ほど強く)
+        vec2 off = dir * uCA;
+        vec3 c;
+        c.r = texture2D(tDiffuse, vUv + off).r;
+        c.g = texture2D(tDiffuse, vUv).g;
+        c.b = texture2D(tDiffuse, vUv - off).b;
+        // 彩度ブースト
+        float lum = dot(c, vec3(0.299, 0.587, 0.114));
+        c = mix(vec3(lum), c, uSat);
+        // 昼夜スプリットトーン (影/ハイライトに色を分ける)
+        float sh = 1.0 - smoothstep(0.0, 0.5, lum);
+        float hi = smoothstep(0.5, 1.0, lum);
+        vec3 shadowTint = mix(vec3(0.0, 0.02, 0.08), vec3(0.02, 0.03, 0.10), uDayness); // 影=クール
+        vec3 highTint   = mix(vec3(0.02, 0.03, 0.08), vec3(0.10, 0.06, 0.0), uDayness); // ハイライト 夜クール→昼ウォーム
+        c += shadowTint * sh * 0.6 + highTint * hi * 0.6;
+        // 軽いリフト
+        c = pow(max(c, 0.0), vec3(0.96));
+        // ビネット
+        float d = length(dir);
+        float vig = smoothstep(0.85, 0.42, d);
+        c *= mix(1.0, vig, uVignette);
+        gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+      }`,
+  });
+  gradeUniforms.uCA.value = reducedMotion ? 0 : 0.0016 * caScale;
+  composer.addPass(gradePass);
 
   resize(canvas);
   window.addEventListener('resize', () => resize(canvas));

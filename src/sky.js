@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { state } from './state.js';
-import { scene, lights, renderer, bloomPass, camera } from './engine.js';
+import { scene, lights, renderer, bloomPass, gradeUniforms } from './engine.js';
 
 let sunSphere, moonSphere, stars, dome;
 const _sunDir = new THREE.Vector3();
@@ -154,6 +154,7 @@ export function updateSky(dt, playerPos) {
   // 露出と Bloom しきい値の昼夜ランプ (夕焼けでオーバー露出、夜は滲み強め)
   renderer.toneMappingExposure = 0.85 + dayness * 0.35 + glow * 0.15;
   if (bloomPass) bloomPass.threshold = 0.82 - (1 - dayness) * 0.22;
+  gradeUniforms.uDayness.value = dayness; // カラーグレードのスプリットトーン
 
   // 影とライトの向きはプレイヤー追従
   lights.sun.position.set(
