@@ -16,10 +16,9 @@ const SIZE = CONFIG.WORLD.CHUNK_SIZE;
 const SEG = isMobile ? CONFIG.WORLD.CHUNK_SEGMENTS_MOBILE : CONFIG.WORLD.CHUNK_SEGMENTS;
 const R = CONFIG.WORLD.VIEW_RADIUS;
 
-const chunks = new Map();        // "cx,cz" → { group, uniqueGeos, ims, crystals }
+const chunks = new Map();        // "cx,cz" → { group, uniqueGeos, ims, woodNodes, stoneNodes, ... }
 const buildQueue = [];           // [cx, cz] の生成待ち
 const queuedKeys = new Set();
-const collectedCrystals = new Set(); // "cx,cz,i" 取得済みクリスタル
 
 let water = null;
 let waterGeo = null;
@@ -40,7 +39,6 @@ const GEO = {
   leaf: new THREE.SphereGeometry(1.0, 16, 12),
   rock: new THREE.IcosahedronGeometry(0.7, 2),
   flower: new THREE.SphereGeometry(0.1, 8, 6),
-  crystal: new THREE.OctahedronGeometry(0.42),
   pillar: new THREE.CylinderGeometry(0.5, 0.8, 34, 16),
 };
 
@@ -82,10 +80,6 @@ const MAT = {
   sakura: new THREE.MeshStandardMaterial({ color: 0xf4b6c8, roughness: 0.85 }),
   rock: new THREE.MeshStandardMaterial({ color: 0x8d8577, roughness: 0.95 }),
   flower: new THREE.MeshStandardMaterial({ roughness: 0.7 }),
-  crystal: new THREE.MeshStandardMaterial({
-    color: 0x9ff0ff, emissive: 0x2ad6f0, emissiveIntensity: 1.6,
-    roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.92,
-  }),
   water: new THREE.ShaderMaterial({
     transparent: true,
     fog: false, // フォグはシェーダ内で手動 (空ドームに溶ける)
@@ -415,21 +409,9 @@ function buildChunk(cx, cz) {
     ims.push(im);
   }
 
-  // --- クリスタル (個別メッシュ: 回転 + 取得があるため) ---
-  const crystals = [];
-  for (let i = 0; i < S.CRYSTALS_PER_CHUNK; i++) {
-    const ckey = key + ',' + i;
-    if (collectedCrystals.has(ckey)) continue;
-    const wx = cx * SIZE + hash2(cx * 111 + i * 11, cz * 113 + i, seed + 83) * SIZE;
-    const wz = cz * SIZE + hash2(cx * 121 + i, cz * 127 + i * 13, seed + 89) * SIZE;
-    const h = heightAt(wx, wz);
-    if (h < CONFIG.WATER_LEVEL + 0.3) continue;
-    const mesh = new THREE.Mesh(GEO.crystal, MAT.crystal);
-    const baseY = h + 0.9;
-    mesh.position.set(wx, baseY, wz);
-    group.add(mesh);
-    crystals.push({ mesh, key: ckey, baseY, phase: hash2(i, cx + cz * 3, seed + 97) * Math.PI * 2 });
-  }
+  // --- 採取ノード (木→木材 / 岩→石。座標だけ覚えておく) ---
+  const woodNodes = trees.map(t => ({ x: t.x, z: t.z }));
+  const stoneNodes = rocks.map(r => ({ x: r.x, z: r.z }));
 
   // --- 光の柱 (まれに出る遠景ランドマーク。bloom で光って探索を誘う) ---
   if (hash2(cx * 7, cz * 13, seed + 211) < 0.1) {
@@ -444,7 +426,7 @@ function buildChunk(cx, cz) {
   }
 
   scene.add(group);
-  chunks.set(key, { group, uniqueGeos, ims, crystals, obstacles, cx, cz });
+  chunks.set(key, { group, uniqueGeos, ims, woodNodes, stoneNodes, obstacles, cx, cz });
 }
 
 // ---------- 衝突解決: 幹/岩から円-円で押し出す ----------
@@ -481,31 +463,22 @@ function disposeChunk(key) {
   chunks.delete(key);
 }
 
-// ---------- 目標トラッカー用: 最寄りの未取得クリスタル ----------
-//   戻り値: { angle, dist } (angle は atan2(dx,dz)) / 無ければ null
-export function nearestCrystal(playerPos) {
-  let best = null, bestD2 = Infinity;
+// ---------- 採取: 範囲内で最寄りの木/岩ノードを返す ----------
+//   戻り値: { type:'wood'|'stone', x, z, dist } / 無ければ null
+export function nearestGatherNode(playerPos, range) {
+  let best = null, bestD2 = range * range;
   for (const chunk of chunks.values()) {
-    for (const cr of chunk.crystals) {
-      if (!cr.mesh.parent) continue;
-      const dx = cr.mesh.position.x - playerPos.x;
-      const dz = cr.mesh.position.z - playerPos.z;
-      const d2 = dx * dx + dz * dz;
-      if (d2 < bestD2) { bestD2 = d2; best = { dx, dz }; }
+    for (const t of [['wood', chunk.woodNodes], ['stone', chunk.stoneNodes]]) {
+      const [type, list] = t;
+      for (const node of list) {
+        const dx = node.x - playerPos.x;
+        const dz = node.z - playerPos.z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < bestD2) { bestD2 = d2; best = { type, x: node.x, z: node.z, dist: Math.sqrt(d2) }; }
+      }
     }
   }
-  if (!best) return null;
-  return { angle: Math.atan2(best.dx, best.dz), dist: Math.sqrt(bestD2) };
-}
-
-// ---------- セーブ用: 取得済みクリスタルの読み書き ----------
-export function getCollectedKeys() {
-  return [...collectedCrystals];
-}
-
-export function restoreCollected(arr) {
-  collectedCrystals.clear();
-  if (Array.isArray(arr)) for (const k of arr) collectedCrystals.add(k);
+  return best;
 }
 
 // 全チャンクを破棄して再生成を促す (つづきから等で位置がワープする時)
@@ -518,15 +491,12 @@ export function resetChunks() {
 }
 
 // ---------- 毎フレーム更新 ----------
-//   戻り値: このフレームで取得したクリスタル数
 let lastPcx = Infinity;
 let lastPcz = Infinity;
 
 export function updateWorld(dt, playerPos) {
   elapsed += dt;
   windUniforms.uTime.value = elapsed;
-  // クリスタルの発光を脈動させる (共有マテリアル1行、Bloom で煌めく)
-  MAT.crystal.emissiveIntensity = 1.3 + Math.sin(elapsed * 4) * 0.5;
 
   // チャンクの読み込み / 破棄 (スキャンは境界をまたいだ時だけ)
   const pcx = Math.floor(playerPos.x / SIZE);
@@ -573,39 +543,4 @@ export function updateWorld(dt, playerPos) {
     mountains.position.x = playerPos.x;
     mountains.position.z = playerPos.z;
   }
-
-  // クリスタルのアニメ + 吸い寄せ + 取得判定
-  //   戻り値は取得したクリスタルのワールド座標の配列 ("+1" 演出用)
-  const picked = [];
-  const magnet2 = CONFIG.MAGNET_DIST * CONFIG.MAGNET_DIST;
-  const pick2 = CONFIG.PICKUP_DIST * CONFIG.PICKUP_DIST;
-  for (const chunk of chunks.values()) {
-    for (const cr of chunk.crystals) {
-      if (!cr.mesh.parent) continue;
-      cr.mesh.rotation.y += dt * 2;
-      const tx = playerPos.x;
-      const ty = playerPos.y + 1;
-      const tz = playerPos.z;
-      const dx = cr.mesh.position.x - tx;
-      const dy = (cr.baseY + Math.sin(elapsed * 2 + cr.phase) * 0.18) - ty;
-      const dz = cr.mesh.position.z - tz;
-      const d2 = dx * dx + dy * dy + dz * dz;
-      if (d2 < magnet2) {
-        // プレイヤーへ吸い寄せ (近いほど速く)
-        const k = Math.min(1, CONFIG.MAGNET_SPEED * dt * (1.2 - Math.sqrt(d2) / CONFIG.MAGNET_DIST));
-        cr.mesh.position.x += (tx - cr.mesh.position.x) * k;
-        cr.mesh.position.y += (ty - cr.mesh.position.y) * k;
-        cr.mesh.position.z += (tz - cr.mesh.position.z) * k;
-      } else {
-        // 通常は浮遊アニメ
-        cr.mesh.position.y = cr.baseY + Math.sin(elapsed * 2 + cr.phase) * 0.18;
-      }
-      if (d2 < pick2) {
-        picked.push({ x: cr.mesh.position.x, y: cr.mesh.position.y, z: cr.mesh.position.z });
-        chunk.group.remove(cr.mesh);
-        collectedCrystals.add(cr.key);
-      }
-    }
-  }
-  return picked;
 }

@@ -36,24 +36,6 @@ let timeoutId = 0;
 let lastNow = 0;
 let autosaveTimer = 0;
 
-// クリスタル累計収集数に応じて能力を解放する (消費される手持ちとは別)
-function checkProgress() {
-  const a = state.abilities;
-  const P = CONFIG.PROGRESSION;
-  if (!a.doubleJump && state.crystalsTotal >= P.DOUBLE_JUMP) {
-    a.doubleJump = true;
-    showBanner('💎 2段ジャンプ 解放！ (空中でもう一度ジャンプ)');
-  }
-  if (!a.glide && state.crystalsTotal >= P.GLIDE) {
-    a.glide = true;
-    showBanner('💎 グライド 解放！ (ジャンプ長押しでゆっくり降下)');
-  }
-  if (!a.swim && state.crystalsTotal >= P.SWIM) {
-    a.swim = true;
-    showBanner('💎 泳ぎ 解放！ (深い水で泳げる)');
-  }
-}
-
 function scheduleNextFrame() {
   rafId = requestAnimationFrame(tick);
   timeoutId = setTimeout(tick, 150);
@@ -77,14 +59,7 @@ function frame(now) {
     updateTitleCamera(dt);
   } else if (!state.paused) {
     updatePlayer(dt);
-    const picked = updateWorld(dt, state.player.pos);
-    if (picked.length > 0) {
-      state.crystals += picked.length;      // 手持ち資材
-      state.crystalsTotal += picked.length; // 累計 (能力解放用)
-      playPickup();
-      for (const pos of picked) showPickupPopup(pos);
-      checkProgress();
-    }
+    updateWorld(dt, state.player.pos);
     updateCreatures(dt, state.player.pos);
     updateVfx(dt, state.player.pos);
     updateBuild(dt);

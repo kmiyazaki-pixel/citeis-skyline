@@ -65,7 +65,6 @@ export const CONFIG = {
     TREES_PER_CHUNK: 22,
     ROCKS_PER_CHUNK: 7,
     FLOWERS_PER_CHUNK: 34,
-    CRYSTALS_PER_CHUNK: 2,
     PINE_RATIO: 0.45,    // 木のうち松の割合
     SAKURA_RATIO: 0.12,  // 木のうち桜の割合
     TREE_MAX_HEIGHT: 11, // この標高より上に木は生えない
@@ -80,24 +79,44 @@ export const CONFIG = {
     SLEEP_DIST: 220,     // プレイヤーがこれ以上遠いと更新停止
   },
 
-  PICKUP_DIST: 1.6,      // クリスタル取得距離
-  MAGNET_DIST: 4.5,      // この距離まで近づくとクリスタルが吸い寄せられる
-  MAGNET_SPEED: 9,       // 吸い寄せの速さ
-
-  // 進行: クリスタル収集数 (累計) で能力を解放
-  PROGRESSION: {
-    DOUBLE_JUMP: 5,   // 2段ジャンプ
-    GLIDE: 15,        // 滑空 (ジャンプ長押しでゆっくり降下)
-    SWIM: 30,         // 泳ぎ (水面に浮く)
+  // 採取 (木→木材 / 岩→石)
+  GATHER: {
+    RANGE: 4,          // この距離内の木/岩を採取できる
+    COOLDOWN: 0.3,     // 採取の間隔 (秒)
+    WOOD_BASE: 2,      // 木1回の基本採取量 (×(1+道具レベル))
+    STONE_BASE: 2,
   },
 
-  // 拠点づくり (クリスタルを資材として消費)
+  // 採取量を増やす道具 (レベルを上げると採取量+1)
+  TOOL: {
+    MAX_LEVEL: 3,
+    COST: [             // レベルn→n+1 にする費用
+      { wood: 8, stone: 4 },
+      { wood: 20, stone: 14 },
+      { wood: 40, stone: 30 },
+    ],
+  },
+
+  // 進行: 累計採取数で能力を解放
+  PROGRESSION: {
+    DOUBLE_JUMP: 12,  // 2段ジャンプ
+    GLIDE: 36,        // 滑空 (ジャンプ長押しでゆっくり降下)
+    SWIM: 80,         // 泳ぎ (水面に浮く)
+  },
+
+  // 拠点づくり (木材/石を消費)
   BUILD: {
     PLACE_DIST: 5,     // プレイヤーの前方この距離に設置
     GRID: 2,           // 設置グリッド (ワールド単位)
     MAX_SLOPE: 1.6,    // この傾斜を超える場所には置けない
+    // 設置順 (パレットの切替順)
+    ORDER: ['foundation', 'cottage', 'furnace', 'bridge', 'lantern'],
     KITS: {
-      foundation: { cost: 3, label: '土台' }, // まずは土台
+      foundation: { label: '土台', wood: 4, stone: 2 },
+      cottage:    { label: '小屋', wood: 16, stone: 6 },
+      furnace:    { label: 'かまど', wood: 6, stone: 14 },
+      bridge:     { label: '橋', wood: 10, stone: 4 },
+      lantern:    { label: '灯り', wood: 4, stone: 2 },
     },
   },
 };

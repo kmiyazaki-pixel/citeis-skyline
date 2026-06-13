@@ -28,13 +28,20 @@
 
   <div id="hud">
     <div class="hud-row">
-      <div class="hud-chip" id="crystalCount">💎 0</div>
+      <div class="hud-chip" id="woodCount">🪵 0</div>
+      <div class="hud-chip" id="stoneCount">🪨 0</div>
+      <button class="hud-chip" id="toolBtn">🔧 Lv0</button>
       <div class="hud-chip" id="clock">☀️ 08:00</div>
       <div class="hud-chip" id="compass">北</div>
       <button class="hud-chip" id="buildBtn">🔨</button>
       <button class="hud-chip" id="pauseBtn">☰</button>
     </div>
-    <div id="buildHint" class="hidden"></div>
+    <div id="buildPalette" class="hidden">
+      <button id="kitPrev">◀</button>
+      <span id="buildHint"></span>
+      <button id="kitNext">▶</button>
+    </div>
+    <button id="gatherBtn" class="hidden">🪓 採取</button>
     <button id="placeBtn" class="hidden">設置</button>
     <div id="objective"><span id="objArrow">▲</span> <span id="objDist"></span></div>
     <div id="staminaWrap"><div id="staminaBar"></div></div>

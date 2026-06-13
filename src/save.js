@@ -1,13 +1,13 @@
 // =====================================================
 //  セーブ - localStorage に進行状況を永続化
-//   位置/視点・収集数・解放能力・取得済みクリスタル・時刻を保存
+//   位置/視点・資材(木材/石)・道具・解放能力・構造物・時刻を保存
 // =====================================================
 
 import { state } from './state.js';
-import { getCollectedKeys, restoreCollected, resetChunks } from './world.js';
+import { resetChunks } from './world.js';
 import { spawnAllStructures } from './structures.js';
 
-const KEY = 'komorebi-save-v1';
+const KEY = 'komorebi-save-v2';
 
 export function hasSave() {
   try {
@@ -21,15 +21,16 @@ export function save() {
   try {
     const p = state.player;
     const data = {
-      v: 1,
+      v: 2,
       pos: { x: p.pos.x, y: p.pos.y, z: p.pos.z },
       yaw: p.yaw,
       pitch: p.pitch,
-      crystals: state.crystals,
-      crystalsTotal: state.crystalsTotal,
+      wood: state.wood,
+      stone: state.stone,
+      gatheredTotal: state.gatheredTotal,
+      toolLevel: state.toolLevel,
       abilities: { ...state.abilities },
       timeOfDay: state.timeOfDay,
-      collected: getCollectedKeys(),
       structures: state.structures,
     };
     localStorage.setItem(KEY, JSON.stringify(data));
@@ -50,15 +51,15 @@ export function loadAndApply() {
   if (data.pos) { p.pos.x = data.pos.x; p.pos.y = data.pos.y; p.pos.z = data.pos.z; }
   if (typeof data.yaw === 'number') p.yaw = data.yaw;
   if (typeof data.pitch === 'number') p.pitch = data.pitch;
-  if (typeof data.crystals === 'number') state.crystals = data.crystals;
-  if (typeof data.crystalsTotal === 'number') state.crystalsTotal = data.crystalsTotal;
-  else if (typeof data.crystals === 'number') state.crystalsTotal = data.crystals; // 旧セーブ互換
+  if (typeof data.wood === 'number') state.wood = data.wood;
+  if (typeof data.stone === 'number') state.stone = data.stone;
+  if (typeof data.gatheredTotal === 'number') state.gatheredTotal = data.gatheredTotal;
+  if (typeof data.toolLevel === 'number') state.toolLevel = data.toolLevel;
   if (data.abilities) Object.assign(state.abilities, data.abilities);
   if (typeof data.timeOfDay === 'number') state.timeOfDay = data.timeOfDay;
   state.structures = Array.isArray(data.structures) ? data.structures : [];
 
-  restoreCollected(data.collected);
-  resetChunks(); // 取得済みを反映しつつ新しい位置の周囲を作り直す
+  resetChunks();        // 新しい位置の周囲を作り直す
   spawnAllStructures(); // 設置済みの拠点を復元
   return true;
 }

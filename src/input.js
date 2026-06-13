@@ -8,7 +8,8 @@
 import { state } from './state.js';
 import { isTouch } from './engine.js';
 import { togglePause } from './hud.js';
-import { toggleBuildMode, placeStructure, isBuildMode } from './build.js';
+import { toggleBuildMode, placeStructure, isBuildMode, cycleKit } from './build.js';
+import { tryGather, upgradeTool } from './gather.js';
 
 const keys = new Set();
 let dragging = false;
@@ -28,7 +29,15 @@ export function setupInput(canvas) {
     }
     if (e.code === 'Escape') { togglePause(); return; }
     if (e.code === 'KeyB' && state.started) { toggleBuildMode(); return; }
-    if (e.code === 'KeyE' && isBuildMode()) { placeStructure(); return; }
+    if (e.code === 'KeyE' && state.started) {
+      if (isBuildMode()) placeStructure(); else tryGather();
+      return;
+    }
+    if ((e.code === 'KeyQ' || e.code === 'KeyTab') && isBuildMode()) {
+      e.preventDefault();
+      cycleKit(1);
+      return;
+    }
     if (e.code === 'Space' && !keys.has('Space') && state.started) {
       state.input.jumpQueued = true;
       state.input.jumpHeld = true;
@@ -72,6 +81,7 @@ export function setupInput(canvas) {
   canvas.addEventListener('click', (e) => {
     if (Math.hypot(e.clientX - downX, e.clientY - downY) > 4) return; // ドラッグだった
     if (isBuildMode()) { placeStructure(); return; } // ビルド中のクリックは設置
+    if (state.started && document.pointerLockElement === canvas) { tryGather(); return; } // ロック中のクリックは採取
     if (state.started && document.pointerLockElement !== canvas) {
       try {
         const r = canvas.requestPointerLock();
@@ -92,6 +102,20 @@ export function setupInput(canvas) {
   if (isTouch) showTouchUI(); // 初期推定 (スマホ/タブレット)
   // タッチ液晶ノートPCなどは実際にタッチされた時に表示
   window.addEventListener('touchstart', showTouchUI, { once: true });
+
+  // 拠点づくり / 採取のボタン (クリック + タッチ両対応)
+  const tapBtn = (id, fn) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('click', fn);
+    el.addEventListener('touchend', (e) => { e.preventDefault(); fn(); }, { passive: false });
+  };
+  tapBtn('buildBtn', () => toggleBuildMode());
+  tapBtn('placeBtn', () => placeStructure());
+  tapBtn('gatherBtn', () => tryGather());
+  tapBtn('toolBtn', () => upgradeTool());
+  tapBtn('kitPrev', () => cycleKit(-1));
+  tapBtn('kitNext', () => cycleKit(1));
 
   jumpBtn.addEventListener('touchstart', (e) => {
     e.preventDefault();

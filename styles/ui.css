@@ -31,12 +31,60 @@
 
 #compass { margin-left: auto; }
 
-#pauseBtn, #buildBtn {
+#pauseBtn, #buildBtn, #toolBtn {
   pointer-events: auto;
   cursor: pointer;
   font-family: inherit;
   color: #fff;
 }
+
+/* ビルドパレット (建てる物を切替) */
+#buildPalette {
+  position: absolute;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(10, 20, 40, 0.6);
+  border: 1px solid rgba(102, 221, 119, 0.6);
+  border-radius: 999px;
+  padding: 4px 8px;
+}
+
+#buildPalette.hidden { display: none; }
+#buildPalette span { font-size: 13px; font-weight: 700; color: #cdeccf; white-space: nowrap; min-width: 180px; text-align: center; }
+#kitPrev, #kitNext {
+  pointer-events: auto;
+  cursor: pointer;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+}
+
+/* 採取ボタン (タッチのみ) */
+#gatherBtn {
+  position: absolute;
+  right: 120px;
+  bottom: 52px;
+  padding: 12px 18px;
+  font-family: inherit;
+  font-weight: 900;
+  font-size: 15px;
+  color: #0d1430;
+  background: linear-gradient(180deg, #f0d9ae, #c79a5a);
+  border: none;
+  border-radius: 999px;
+  box-shadow: 0 4px 0 #8a6a32;
+  pointer-events: auto;
+}
+#gatherBtn:active { transform: translateY(3px); box-shadow: 0 1px 0 #8a6a32; }
+#gatherBtn.hidden { display: none; }
 
 #buildBtn.active {
   background: rgba(102, 221, 119, 0.4);

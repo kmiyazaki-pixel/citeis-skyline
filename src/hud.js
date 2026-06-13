@@ -8,11 +8,12 @@ import { initAudio } from './audio.js';
 import { isTouch, camera } from './engine.js';
 import { hasSave, loadAndApply, clearSave, save } from './save.js';
 import { saveSettings, applySettings } from './settings.js';
-import { nearestCrystal } from './world.js';
 import { CONFIG } from './config.js';
-import { toggleBuildMode, placeStructure } from './build.js';
+import { toggleBuildMode, currentKitInfo } from './build.js';
 
-const $crystal = document.getElementById('crystalCount');
+const $wood = document.getElementById('woodCount');
+const $stone = document.getElementById('stoneCount');
+const $tool = document.getElementById('toolBtn');
 const $clock = document.getElementById('clock');
 const $compass = document.getElementById('compass');
 const $hint = document.getElementById('hint');
@@ -21,13 +22,13 @@ const $hud = document.getElementById('hud');
 const $app = document.getElementById('app');
 const $banner = document.getElementById('banner');
 const $objective = document.getElementById('objective');
-const $objArrow = document.getElementById('objArrow');
-const $objDist = document.getElementById('objDist');
 const $staminaWrap = document.getElementById('staminaWrap');
 const $staminaBar = document.getElementById('staminaBar');
 const $buildBtn = document.getElementById('buildBtn');
 const $placeBtn = document.getElementById('placeBtn');
+const $gatherBtn = document.getElementById('gatherBtn');
 const $buildHint = document.getElementById('buildHint');
+const $buildPalette = document.getElementById('buildPalette');
 
 const _proj = new THREE.Vector3();
 
@@ -125,11 +126,6 @@ export function setupPause() {
     : 'WASD/矢印: 移動 ・ ドラッグ/ロック: 視点 ・ Space: ジャンプ(長押しでグライド) ・ Shift: ダッシュ ・ Esc: 一時停止';
 
   document.getElementById('pauseBtn').addEventListener('click', () => togglePause());
-  // 拠点づくり
-  $buildBtn.addEventListener('click', () => toggleBuildMode());
-  $buildBtn.addEventListener('touchend', (e) => { e.preventDefault(); toggleBuildMode(); }, { passive: false });
-  $placeBtn.addEventListener('click', () => placeStructure());
-  $placeBtn.addEventListener('touchend', (e) => { e.preventDefault(); placeStructure(); }, { passive: false });
   document.getElementById('resumeBtn').addEventListener('click', () => setPaused(false));
   document.getElementById('toTitleBtn').addEventListener('click', () => {
     save();
@@ -153,46 +149,49 @@ export function showPickupPopup(worldPos) {
 }
 
 export function updateHUD() {
-  $crystal.textContent = '💎 ' + state.crystals;
+  $wood.textContent = '🪵 ' + state.wood;
+  $stone.textContent = '🪨 ' + state.stone;
 
-  // 時計 (timeOfDay 0..1 → HH:MM)
+  // 道具レベルと次の強化費用
+  const tcost = CONFIG.TOOL.COST[state.toolLevel];
+  $tool.textContent = tcost
+    ? `🔧 Lv${state.toolLevel} (🪵${tcost.wood} 🪨${tcost.stone})`
+    : `🔧 Lv${state.toolLevel} MAX`;
+  const canTool = tcost && state.wood >= tcost.wood && state.stone >= tcost.stone;
+  $tool.classList.toggle('active', !!canTool);
+
+  // 時計
   const mins = Math.floor(state.timeOfDay * 24 * 60);
   const hh = String(Math.floor(mins / 60)).padStart(2, '0');
   const mm = String(mins % 60).padStart(2, '0');
   const icon = state.timeOfDay > 0.27 && state.timeOfDay < 0.73 ? '☀️' : '🌙';
   $clock.textContent = `${icon} ${hh}:${mm}`;
 
-  // コンパス (カメラの向いている方角)
+  // コンパス
   const heading = ((-state.player.yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
   const idx = Math.round(heading / (Math.PI / 4)) % 8;
   $compass.textContent = DIRS[idx];
 
-  // 目標トラッカー: 最寄りクリスタルの方向へ矢印を回す
-  const nc = nearestCrystal(state.player.pos);
-  if (nc) {
-    $objective.classList.remove('hidden');
-    // 画面上で「上=カメラ前方」になるよう補正 (前方のワールド角は yaw+π)
-    const rel = nc.angle - state.player.yaw - Math.PI;
-    $objArrow.style.transform = `rotate(${rel}rad)`;
-    $objDist.textContent = nc.dist < 1000 ? Math.round(nc.dist) + 'm' : '';
-  } else {
-    $objective.classList.add('hidden');
-  }
+  $objective.classList.add('hidden'); // クリスタル廃止で目標矢印は不使用
 
   // スタミナバー (満タン時は隠す)
   const st = state.player.stamina / CONFIG.PLAYER.STAMINA_MAX;
   $staminaBar.style.width = (st * 100) + '%';
   $staminaWrap.classList.toggle('show', st < 0.999);
 
+  // 採取ボタン (タッチ端末・非ビルド時のみ)
+  $gatherBtn.classList.toggle('hidden', !(isTouch && !state.buildMode));
+
   // 拠点づくりモードの表示
   $buildBtn.classList.toggle('active', state.buildMode);
   $placeBtn.classList.toggle('hidden', !state.buildMode);
-  $buildHint.classList.toggle('hidden', !state.buildMode);
+  $buildPalette.classList.toggle('hidden', !state.buildMode);
   if (state.buildMode) {
-    const cost = CONFIG.BUILD.KITS.foundation.cost;
-    const ok = state.crystals >= cost;
+    const kit = currentKitInfo();
+    const ok = state.wood >= kit.wood && state.stone >= kit.stone;
     $buildHint.textContent = ok
-      ? `土台を設置 (資材 ${cost}) ・ 手持ち 💎${state.crystals}`
-      : `資材が足りません (必要 ${cost} / 手持ち ${state.crystals})`;
+      ? `${kit.label}  🪵${kit.wood} 🪨${kit.stone}`
+      : `${kit.label}  資材不足 (🪵${kit.wood} 🪨${kit.stone})`;
+    $buildHint.style.color = ok ? '#cdeccf' : '#f0b0b0';
   }
 }
