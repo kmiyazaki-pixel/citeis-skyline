@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { state } from './state.js';
 import { scene, camera, reducedMotion } from './engine.js';
-import { heightAt } from './world.js';
+import { heightAt, resolveCollision } from './world.js';
 import { playJump, playStep, playLand, playSplash } from './audio.js';
 
 let avatar = null;
@@ -136,6 +136,8 @@ export function updatePlayer(dt) {
 
   p.pos.x += mvx * speed * dt;
   p.pos.z += mvz * speed * dt;
+  // 幹/岩との衝突を解決 (XZ 平面で押し出す)
+  resolveCollision(p.pos, 0.35);
 
   // --- 重力と接地 ---
   p.vel.y -= P.GRAVITY * dt;

@@ -161,6 +161,7 @@ function buildChunk(cx, cz) {
   const group = new THREE.Group();
   const uniqueGeos = [];
   const ims = [];
+  const obstacles = []; // 衝突判定用 { x, z, r } (幹・岩)
   const S = CONFIG.SCENERY;
   const seed = CONFIG.TERRAIN.SEED;
 
@@ -245,6 +246,7 @@ function buildChunk(cx, cz) {
       _dummy.rotation.set(0, hash2(i, 5, seed) * Math.PI, 0);
       _dummy.updateMatrix();
       trunkIM.setMatrixAt(i, _dummy.matrix);
+      obstacles.push({ x: t.x, z: t.z, r: 0.28 + t.s * 0.12 });
     });
     // インスタンス行列はチャンク生成後に変わらないので、境界球を一度
     // 計算しておけばカメラと影の両パスでフラスタムカリングが効く
@@ -295,6 +297,7 @@ function buildChunk(cx, cz) {
       _dummy.rotation.set(hash2(i, 1, seed) * 3, hash2(i, 2, seed) * 3, hash2(i, 3, seed) * 3);
       _dummy.updateMatrix();
       im.setMatrixAt(i, _dummy.matrix);
+      obstacles.push({ x: r.x, z: r.z, r: r.s * 0.6 });
     });
     im.computeBoundingSphere();
     group.add(im);
@@ -354,7 +357,32 @@ function buildChunk(cx, cz) {
   }
 
   scene.add(group);
-  chunks.set(key, { group, uniqueGeos, ims, crystals });
+  chunks.set(key, { group, uniqueGeos, ims, crystals, obstacles, cx, cz });
+}
+
+// ---------- 衝突解決: 幹/岩から円-円で押し出す ----------
+//   pos を直接書き換える。プレイヤーの XZ 移動後に呼ぶ
+export function resolveCollision(pos, radius) {
+  const pcx = Math.floor(pos.x / SIZE);
+  const pcz = Math.floor(pos.z / SIZE);
+  for (let dz = -1; dz <= 1; dz++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const chunk = chunks.get((pcx + dx) + ',' + (pcz + dz));
+      if (!chunk) continue;
+      for (const o of chunk.obstacles) {
+        const ox = pos.x - o.x;
+        const oz = pos.z - o.z;
+        const minD = o.r + radius;
+        const d2 = ox * ox + oz * oz;
+        if (d2 < minD * minD && d2 > 1e-6) {
+          const d = Math.sqrt(d2);
+          const push = (minD - d) / d;
+          pos.x += ox * push;
+          pos.z += oz * push;
+        }
+      }
+    }
+  }
 }
 
 function disposeChunk(key) {
