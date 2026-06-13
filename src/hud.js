@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { state } from './state.js';
 import { initAudio } from './audio.js';
 import { isTouch, camera } from './engine.js';
+import { hasSave, loadAndApply, clearSave } from './save.js';
 
 const $crystal = document.getElementById('crystalCount');
 const $clock = document.getElementById('clock');
@@ -14,6 +15,7 @@ const $hint = document.getElementById('hint');
 const $title = document.getElementById('title');
 const $hud = document.getElementById('hud');
 const $app = document.getElementById('app');
+const $banner = document.getElementById('banner');
 
 const _proj = new THREE.Vector3();
 
@@ -23,7 +25,7 @@ export function setupHUD() {
   if (isTouch) {
     $hint.textContent = '左下スティック: 移動 ・ 画面ドラッグ: 視点 ・ 右下: ジャンプ';
   }
-  const start = () => {
+  const begin = () => {
     if (state.started) return;
     state.started = true;
     // タイトル画面中に押された Space などの幽霊ジャンプを消す
@@ -33,17 +35,31 @@ export function setupHUD() {
     $title.classList.add('hidden');
     $hud.classList.add('visible');
   };
-  document.getElementById('startBtn').addEventListener('click', start);
-  // touchstart はユーザーアクティベーション扱いにならず AudioContext が
-  // suspended のままになるため、touchend で開始する
-  document.getElementById('startBtn').addEventListener('touchend', (e) => {
-    e.preventDefault(); // 合成 click を抑止して二重起動を防ぐ
-    start();
-  }, { passive: false });
+  const newGame = () => { clearSave(); begin(); };
+  const continueGame = () => { loadAndApply(); begin(); };
+
+  const $start = document.getElementById('startBtn');
+  const $continue = document.getElementById('continueBtn');
+  // セーブがあれば「つづきから」を出す
+  if (hasSave()) $continue.classList.remove('hidden');
+
+  $start.addEventListener('click', newGame);
+  $start.addEventListener('touchend', (e) => { e.preventDefault(); newGame(); }, { passive: false });
+  $continue.addEventListener('click', continueGame);
+  $continue.addEventListener('touchend', (e) => { e.preventDefault(); continueGame(); }, { passive: false });
+
   // ハイブリッド端末: 実際にタッチされたらヒントをタッチ用に切り替え
   window.addEventListener('touchstart', () => {
     $hint.textContent = '左下スティック: 移動 ・ 画面ドラッグ: 視点 ・ 右下: ジャンプ';
   }, { once: true });
+}
+
+// 画面中央上にメッセージを表示 (能力解放など)
+export function showBanner(text) {
+  $banner.textContent = text;
+  $banner.classList.remove('show');
+  void $banner.offsetWidth; // アニメ再start用にreflow
+  $banner.classList.add('show');
 }
 
 // クリスタル取得時、その位置に「+1」を浮かせる

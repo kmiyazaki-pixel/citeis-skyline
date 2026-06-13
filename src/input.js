@@ -26,17 +26,20 @@ export function setupInput(canvas) {
     }
     if (e.code === 'Space' && !keys.has('Space') && state.started) {
       state.input.jumpQueued = true;
+      state.input.jumpHeld = true;
     }
     keys.add(e.code);
     updateMoveFromKeys();
   });
   window.addEventListener('keyup', (e) => {
+    if (e.code === 'Space') state.input.jumpHeld = false;
     keys.delete(e.code);
     updateMoveFromKeys();
   });
   window.addEventListener('blur', () => {
     keys.clear();
     dragging = false; // フォーカス喪失中の mouseup を取り逃しても引きずらない
+    state.input.jumpHeld = false;
     updateMoveFromKeys();
   });
 
@@ -86,8 +89,14 @@ export function setupInput(canvas) {
 
   jumpBtn.addEventListener('touchstart', (e) => {
     e.preventDefault();
-    if (state.started) state.input.jumpQueued = true;
+    if (state.started) {
+      state.input.jumpQueued = true;
+      state.input.jumpHeld = true;
+    }
   }, { passive: false });
+  const jumpRelease = (e) => { e.preventDefault(); state.input.jumpHeld = false; };
+  jumpBtn.addEventListener('touchend', jumpRelease, { passive: false });
+  jumpBtn.addEventListener('touchcancel', jumpRelease, { passive: false });
 
   canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();

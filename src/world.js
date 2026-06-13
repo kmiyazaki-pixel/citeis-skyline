@@ -326,6 +326,25 @@ function disposeChunk(key) {
   chunks.delete(key);
 }
 
+// ---------- セーブ用: 取得済みクリスタルの読み書き ----------
+export function getCollectedKeys() {
+  return [...collectedCrystals];
+}
+
+export function restoreCollected(arr) {
+  collectedCrystals.clear();
+  if (Array.isArray(arr)) for (const k of arr) collectedCrystals.add(k);
+}
+
+// 全チャンクを破棄して再生成を促す (つづきから等で位置がワープする時)
+export function resetChunks() {
+  for (const key of [...chunks.keys()]) disposeChunk(key);
+  buildQueue.length = 0;
+  queuedKeys.clear();
+  lastPcx = Infinity;
+  lastPcz = Infinity;
+}
+
 // ---------- 毎フレーム更新 ----------
 //   戻り値: このフレームで取得したクリスタル数
 let lastPcx = Infinity;

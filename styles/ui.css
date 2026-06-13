@@ -170,6 +170,35 @@
 
 #errToast.visible { display: block; }
 
+/* ========= 解放バナー ========= */
+#banner {
+  position: absolute;
+  top: 22%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 28px;
+  background: rgba(13, 20, 48, 0.78);
+  border: 1px solid rgba(174, 240, 255, 0.6);
+  border-radius: 14px;
+  font-weight: 900;
+  font-size: 18px;
+  color: #aef0ff;
+  text-shadow: 0 0 10px rgba(95, 199, 232, 0.7);
+  pointer-events: none;
+  opacity: 0;
+  white-space: nowrap;
+  z-index: 16;
+}
+
+#banner.show { animation: bannerShow 2.6s ease-out forwards; }
+
+@keyframes bannerShow {
+  0%   { opacity: 0; transform: translate(-50%, 10px); }
+  12%  { opacity: 1; transform: translate(-50%, 0); }
+  82%  { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -8px); }
+}
+
 /* ========= クリスタル取得「+1」ポップ ========= */
 .pickup-pop {
   position: absolute;

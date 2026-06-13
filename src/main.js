@@ -9,8 +9,10 @@ import { setupPlayer, updatePlayer, updateTitleCamera } from './player.js';
 import { setupInput } from './input.js';
 import { setupSky, updateSky } from './sky.js';
 import { setupCreatures, updateCreatures } from './creatures.js';
-import { setupHUD, updateHUD, showPickupPopup } from './hud.js';
+import { setupHUD, updateHUD, showPickupPopup, showBanner } from './hud.js';
 import { playPickup, updateAmbience } from './audio.js';
+import { CONFIG } from './config.js';
+import { save } from './save.js';
 
 // ---------- エラーを画面に出す (スマホでのデバッグ補助) ----------
 const $errToast = document.getElementById('errToast');
@@ -28,6 +30,25 @@ window.addEventListener('unhandledrejection', (e) => showError('Promise: ' + (e.
 let rafId = 0;
 let timeoutId = 0;
 let lastNow = 0;
+let autosaveTimer = 0;
+
+// クリスタル収集数に応じて能力を解放する
+function checkProgress() {
+  const a = state.abilities;
+  const P = CONFIG.PROGRESSION;
+  if (!a.doubleJump && state.crystals >= P.DOUBLE_JUMP) {
+    a.doubleJump = true;
+    showBanner('💎 2段ジャンプ 解放！ (空中でもう一度ジャンプ)');
+  }
+  if (!a.glide && state.crystals >= P.GLIDE) {
+    a.glide = true;
+    showBanner('💎 グライド 解放！ (ジャンプ長押しでゆっくり降下)');
+  }
+  if (!a.swim && state.crystals >= P.SWIM) {
+    a.swim = true;
+    showBanner('💎 泳ぎ 解放！ (深い水で泳げる)');
+  }
+}
 
 function scheduleNextFrame() {
   rafId = requestAnimationFrame(tick);
@@ -57,10 +78,15 @@ function frame(now) {
       state.crystals += picked.length;
       playPickup();
       for (const pos of picked) showPickupPopup(pos);
+      checkProgress();
     }
     updateCreatures(dt, state.player.pos);
     updateAmbience(dt, state.timeOfDay);
     updateHUD();
+
+    // 自動セーブ (数秒ごと)
+    autosaveTimer += dt;
+    if (autosaveTimer > 5) { autosaveTimer = 0; save(); }
   }
 
   renderFrame();
@@ -80,6 +106,13 @@ function init() {
 
   // 開発用フック (preview からの動作検証に使う。削除しないこと)
   window.__game = { state };
+
+  // ページ離脱・非表示でセーブ (モバイルはタブ切替が多い)
+  const saveIfPlaying = () => { if (state.started) save(); };
+  window.addEventListener('beforeunload', saveIfPlaying);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) saveIfPlaying();
+  });
 
   // PWA: オフライン対応 (ホーム画面に追加して遊べる)
   if ('serviceWorker' in navigator) {

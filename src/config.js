@@ -29,7 +29,10 @@ export const CONFIG = {
     RUN_SPEED: 11,
     WATER_SLOW: 0.45,    // 水中の速度倍率
     JUMP_SPEED: 7.5,
+    DOUBLE_JUMP_SPEED: 6.5, // 2段目ジャンプ
     GRAVITY: 20,
+    GLIDE_FALL: 2.2,     // 滑空中の最大降下速度
+    SWIM_RISE: 2.5,      // 泳ぎ: 水面へ浮く速さ
     JUMP_BUFFER: 0.15,   // 着地直前のジャンプ入力を生かす猶予 (秒)
     SNAP_DOWN: 0.45,     // 下り坂で地面に吸着する最大段差 (接地の揺れ防止)
     TURN_LERP: 10,       // アバターの向き追従の速さ
@@ -75,4 +78,11 @@ export const CONFIG = {
   PICKUP_DIST: 1.6,      // クリスタル取得距離
   MAGNET_DIST: 4.5,      // この距離まで近づくとクリスタルが吸い寄せられる
   MAGNET_SPEED: 9,       // 吸い寄せの速さ
+
+  // 進行: クリスタル収集数で能力を解放
+  PROGRESSION: {
+    DOUBLE_JUMP: 5,   // 2段ジャンプ
+    GLIDE: 15,        // 滑空 (ジャンプ長押しでゆっくり降下)
+    SWIM: 30,         // 泳ぎ (水面に浮く)
+  },
 };
