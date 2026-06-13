@@ -4,32 +4,27 @@
 
 import { CONFIG } from './config.js';
 
-// 空のグリッドを作る (2D配列)
-function makeEmptyGrid(w, h) {
-  const grid = [];
-  for (let y = 0; y < h; y++) {
-    const row = [];
-    for (let x = 0; x < w; x++) {
-      row.push({ type: 'empty', population: 0 });
-    }
-    grid.push(row);
-  }
-  return grid;
-}
-
 export const state = {
-  // 資源
-  cash: CONFIG.STARTING_CASH,
-  population: 0,
+  started: false,                  // タイトル画面を抜けたか
+  timeOfDay: CONFIG.DAY.START,     // 0..1 (0=深夜0時, 0.5=正午)
+  crystals: 0,                     // 収集したクリスタル数
 
-  // ワールド
-  //   grid[y][x] = { type: 'empty'|'road'|'residential'|'plaza', population: number }
-  //   plaza は装飾タイルでシミュには反応しない
-  grid: makeEmptyGrid(CONFIG.GRID.WIDTH, CONFIG.GRID.HEIGHT),
+  player: {
+    pos: { x: 0, y: 0, z: 0 },
+    vel: { x: 0, y: 0, z: 0 },
+    yaw: 0,        // カメラの水平角
+    pitch: 0.35,   // カメラの俯角
+    avatarYaw: 0,  // アバターの向き (移動方向へ補間)
+    onGround: false,
+  },
 
-  // 現在選択中のツール
-  selectedTool: 'road',
-
-  // タイミング
-  lastTick: 0,
+  // input.js が書き、player.js が読む
+  input: {
+    move: { x: 0, z: 0 },  // -1..1 (x: 右+, z: 前+)
+    lookDX: 0,             // このフレームの視点移動量 (消費式)
+    lookDY: 0,
+    jumpQueued: false,
+    jumpBufferT: 0,   // ジャンプ入力バッファの残り時間 (player.js が管理)
+    running: false,
+  },
 };

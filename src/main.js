@@ -1,64 +1,33 @@
 // =====================================================
-//  エントリポイント - 入力処理とゲームループ
+//  エントリポイント - 初期化とゲームループ
 // =====================================================
 
+import { setupEngine, renderer, scene, camera } from './engine.js';
 import { state } from './state.js';
-import { CONFIG } from './config.js';
-import { $canvas } from './dom.js';
-import { placeTile } from './grid.js';
-import { setupCanvas, render, screenToTile } from './renderer.js';
-import { setupTools } from './tools.js';
-import { simulationTick } from './simulation.js';
-import { updateStatusBar } from './ui.js';
+import { initWorld, updateWorld } from './world.js';
+import { setupPlayer, updatePlayer } from './player.js';
+import { setupInput } from './input.js';
+import { setupSky, updateSky } from './sky.js';
+import { setupCreatures, updateCreatures } from './creatures.js';
+import { setupHUD, updateHUD } from './hud.js';
+import { playPickup } from './audio.js';
 
-// =====================================================
-//  入力 - ドラッグで連続設置 (ヒットテストは renderer に委譲)
-// =====================================================
-let isPainting = false;
-let lastPainted = { x: -1, y: -1 };
-
-function handlePointer(e) {
-  e.preventDefault();
-  const { x, y } = screenToTile(e);
-  if (x < 0) return; // 範囲外 / 未ヒット
-  if (x === lastPainted.x && y === lastPainted.y) return;
-  lastPainted = { x, y };
-  placeTile(x, y, state.selectedTool);
+// ---------- エラーを画面に出す (スマホでのデバッグ補助) ----------
+const $errToast = document.getElementById('errToast');
+function showError(msg) {
+  $errToast.textContent = String(msg).slice(0, 600);
+  $errToast.classList.add('visible');
+  console.error(msg);
 }
+window.addEventListener('error', (e) => showError(e.message + '\n' + (e.error && e.error.stack || '')));
+window.addEventListener('unhandledrejection', (e) => showError('Promise: ' + (e.reason && e.reason.stack || e.reason)));
 
-function setupInput() {
-  // マウス
-  $canvas.addEventListener('mousedown', (e) => {
-    isPainting = true;
-    lastPainted = { x: -1, y: -1 };
-    handlePointer(e);
-  });
-  $canvas.addEventListener('mousemove', (e) => {
-    if (isPainting) handlePointer(e);
-  });
-  window.addEventListener('mouseup', () => { isPainting = false; });
-
-  // タッチ (スマホ対応)
-  $canvas.addEventListener('touchstart', (e) => {
-    isPainting = true;
-    lastPainted = { x: -1, y: -1 };
-    handlePointer(e);
-  }, { passive: false });
-  $canvas.addEventListener('touchmove', (e) => {
-    if (isPainting) handlePointer(e);
-  }, { passive: false });
-  $canvas.addEventListener('touchend', () => { isPainting = false; });
-}
-
-// =====================================================
-//  ゲームループ
+// ---------- ゲームループ ----------
 //   rAF と setTimeout を両方仕掛けて先に発火した方が駆動する。
-//   可視タブ: rAF が先 (60fps)。hidden タブ: rAF は止まるので
-//   setTimeout が保険として動き続ける。visibility が切り替わる
-//   瞬間に rAF 待ちで永久停止する事故をこれで防ぐ
-// =====================================================
+//   visibility 切替の瞬間に rAF 待ちで永久停止する事故を防ぐ
 let rafId = 0;
 let timeoutId = 0;
+let lastNow = 0;
 
 function scheduleNextFrame() {
   rafId = requestAnimationFrame(tick);
@@ -68,29 +37,46 @@ function scheduleNextFrame() {
 function tick() {
   cancelAnimationFrame(rafId);
   clearTimeout(timeoutId);
-  gameLoop(performance.now());
+  frame(performance.now());
 }
 
-function gameLoop(now) {
-  if (now - state.lastTick > CONFIG.TICK_INTERVAL) {
-    state.lastTick = now;
-    simulationTick();
-    updateStatusBar();
+function frame(now) {
+  const dt = Math.min((now - lastNow) / 1000, 0.05); // ワープ防止クランプ
+  lastNow = now;
+
+  // 空はタイトル画面でも動かす (背景演出)
+  updateSky(dt, state.player.pos);
+
+  if (state.started) {
+    updatePlayer(dt);
+    const picked = updateWorld(dt, state.player.pos);
+    if (picked > 0) {
+      state.crystals += picked;
+      playPickup();
+    }
+    updateCreatures(dt, state.player.pos);
+    updateHUD();
   }
-  render();
+
+  renderer.render(scene, camera);
   scheduleNextFrame();
 }
 
-// =====================================================
-//  初期化
-// =====================================================
+// ---------- 初期化 ----------
 function init() {
-  setupCanvas();
-  setupTools();
-  setupInput();
-  updateStatusBar();
+  const canvas = document.getElementById('canvas');
+  setupEngine(canvas);
+  setupSky();
+  setupPlayer();              // スポーン地点を確定 (world は heightAt だけ使う)
+  initWorld(state.player.pos.x, state.player.pos.z);
+  setupCreatures(state.player.pos.x, state.player.pos.z);
+  setupInput(canvas);
+  setupHUD();
 
-  state.lastTick = performance.now();
+  // 開発用フック (preview からの動作検証に使う。削除しないこと)
+  window.__game = { state };
+
+  lastNow = performance.now();
   scheduleNextFrame();
 }
 
