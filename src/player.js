@@ -117,7 +117,20 @@ export function updatePlayer(dt) {
   const len = Math.hypot(mvx, mvz);
   if (len > 1) { mvx /= len; mvz /= len; }
 
-  let speed = inp.running ? P.RUN_SPEED : P.WALK_SPEED;
+  // スタミナ: ダッシュで消費し、歩き/静止で回復。0になると息切れ
+  const moving0 = inp.move.x !== 0 || inp.move.z !== 0;
+  const wantRun = inp.running && moving0 && p.stamina > 0;
+  if (wantRun) {
+    p.stamina = Math.max(0, p.stamina - P.STAMINA_DRAIN * dt);
+  } else {
+    p.stamina = Math.min(P.STAMINA_MAX, p.stamina + P.STAMINA_REGEN * dt);
+  }
+  // 息切れ中 (0付近) は MIN_RUN を超えるまでダッシュ不可
+  const canRun = wantRun && p.stamina > 0 && !(p.stamina < P.STAMINA_MIN_RUN && p._winded);
+  if (p.stamina <= 0) p._winded = true;
+  if (p.stamina >= P.STAMINA_MIN_RUN) p._winded = false;
+
+  let speed = canRun ? P.RUN_SPEED : P.WALK_SPEED;
   const inWater = p.pos.y < CONFIG.WATER_LEVEL - 0.2;
   if (inWater) speed *= P.WATER_SLOW;
 
@@ -224,7 +237,7 @@ export function updatePlayer(dt) {
   landDip = Math.max(0, landDip - landDip * P.LAND_DIP_RECOVER * dt);
 
   // ダッシュ中は FOV を広げてスピード感を出す (視差軽減設定では無効)
-  const fovTarget = (!reducedMotion && inp.running && moving) ? P.FOV_DASH : P.FOV_BASE;
+  const fovTarget = (!reducedMotion && canRun && moving) ? P.FOV_DASH : P.FOV_BASE;
   camera.fov += (fovTarget - camera.fov) * Math.min(1, P.FOV_LERP * dt);
   camera.updateProjectionMatrix();
 

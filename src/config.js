@@ -28,6 +28,10 @@ export const CONFIG = {
     WALK_SPEED: 6,
     RUN_SPEED: 11,
     WATER_SLOW: 0.45,    // 水中の速度倍率
+    STAMINA_MAX: 100,
+    STAMINA_DRAIN: 30,   // ダッシュ中の毎秒消費
+    STAMINA_REGEN: 24,   // 非ダッシュ時の毎秒回復
+    STAMINA_MIN_RUN: 8,  // この値を超えるまで再ダッシュ不可 (息切れ)
     JUMP_SPEED: 7.5,
     DOUBLE_JUMP_SPEED: 6.5, // 2段目ジャンプ
     GRAVITY: 20,

@@ -8,6 +8,8 @@ import { initAudio } from './audio.js';
 import { isTouch, camera } from './engine.js';
 import { hasSave, loadAndApply, clearSave, save } from './save.js';
 import { saveSettings, applySettings } from './settings.js';
+import { nearestCrystal } from './world.js';
+import { CONFIG } from './config.js';
 
 const $crystal = document.getElementById('crystalCount');
 const $clock = document.getElementById('clock');
@@ -17,6 +19,11 @@ const $title = document.getElementById('title');
 const $hud = document.getElementById('hud');
 const $app = document.getElementById('app');
 const $banner = document.getElementById('banner');
+const $objective = document.getElementById('objective');
+const $objArrow = document.getElementById('objArrow');
+const $objDist = document.getElementById('objDist');
+const $staminaWrap = document.getElementById('staminaWrap');
+const $staminaBar = document.getElementById('staminaBar');
 
 const _proj = new THREE.Vector3();
 
@@ -150,4 +157,21 @@ export function updateHUD() {
   const heading = ((-state.player.yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
   const idx = Math.round(heading / (Math.PI / 4)) % 8;
   $compass.textContent = DIRS[idx];
+
+  // 目標トラッカー: 最寄りクリスタルの方向へ矢印を回す
+  const nc = nearestCrystal(state.player.pos);
+  if (nc) {
+    $objective.classList.remove('hidden');
+    // 画面上で「上=カメラ前方」になるよう補正 (前方のワールド角は yaw+π)
+    const rel = nc.angle - state.player.yaw - Math.PI;
+    $objArrow.style.transform = `rotate(${rel}rad)`;
+    $objDist.textContent = nc.dist < 1000 ? Math.round(nc.dist) + 'm' : '';
+  } else {
+    $objective.classList.add('hidden');
+  }
+
+  // スタミナバー (満タン時は隠す)
+  const st = state.player.stamina / CONFIG.PLAYER.STAMINA_MAX;
+  $staminaBar.style.width = (st * 100) + '%';
+  $staminaWrap.classList.toggle('show', st < 0.999);
 }

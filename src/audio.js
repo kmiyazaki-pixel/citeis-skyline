@@ -9,6 +9,7 @@ let ctx = null;
 let master = null;
 let sfxBus = null;
 let ambBus = null;
+let musicBus = null;
 let noiseBuffer = null;
 
 // 環境音ノード
@@ -16,7 +17,7 @@ let windGain = null, dayGain = null, nightGain = null;
 let ambBuilt = false;
 let birdTimer = 0, cricketTimer = 0;
 
-const volumes = { master: 0.8, sfx: 1.0, ambience: 0.6 };
+const volumes = { master: 0.8, sfx: 1.0, ambience: 0.6, music: 0.5 };
 
 export function initAudio() {
   if (ctx) return;
@@ -32,6 +33,9 @@ export function initAudio() {
     ambBus = ctx.createGain();
     ambBus.gain.value = volumes.ambience;
     ambBus.connect(master);
+    musicBus = ctx.createGain();
+    musicBus.gain.value = volumes.music;
+    musicBus.connect(master);
     // 共有ホワイトノイズ (足音・風に使い回す)
     const len = ctx.sampleRate * 2;
     noiseBuffer = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -55,6 +59,7 @@ export function setVolume(cat, v) {
   if (cat === 'master' && master) master.gain.value = v;
   if (cat === 'sfx' && sfxBus) sfxBus.gain.value = v;
   if (cat === 'ambience' && ambBus) ambBus.gain.value = v;
+  if (cat === 'music' && musicBus) musicBus.gain.value = v;
 }
 
 // ---------- 短いノイズバースト (足音などの素) ----------
@@ -76,6 +81,7 @@ function noiseBurst(dur, filterType, freq, gainVal, bus) {
 // ---------- 効果音 ----------
 export function playPickup() {
   if (!ensureAudio()) return;
+  duckMusic();
   const t0 = ctx.currentTime;
   for (const [i, freq] of [[0, 880], [1, 1174.7], [2, 1568]]) {
     const osc = ctx.createOscillator();
@@ -218,5 +224,72 @@ export function updateAmbience(dt, timeOfDay) {
   if (dayness < 0.5 && cricketTimer <= 0) {
     cricket();
     cricketTimer = 0.22 + Math.random() * 0.18;
+  }
+}
+
+// ---------- プロシージャル BGM ----------
+//   ペンタトニックの pad + pluck を lookahead で予約。
+//   昼は明るく高め、夜は低めでまばらに。
+const PENTA = [0, 2, 4, 7, 9, 12];
+let nextNoteTime = 0;
+let beatIndex = 0;
+const BEAT = 1.0; // 秒/拍 (ゆったり)
+
+function midiToFreq(semi, rootHz) {
+  return rootHz * Math.pow(2, semi / 12);
+}
+
+function tone(time, freq, dur, type, peak, attack) {
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, time);
+  g.gain.exponentialRampToValueAtTime(peak, time + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+  osc.connect(g).connect(musicBus);
+  osc.start(time);
+  osc.stop(time + dur + 0.05);
+}
+
+function scheduleBeat(time, dayness) {
+  const root = dayness > 0.5 ? 261.63 : 130.81; // 昼=C4 / 夜=C3
+  // 4拍ごとに pad (持続和音)
+  if (beatIndex % 4 === 0) {
+    const deg = PENTA[(beatIndex / 4) % PENTA.length | 0];
+    tone(time, midiToFreq(deg, root), 3.6, 'sine', 0.05, 1.2);
+    tone(time, midiToFreq(deg + 7, root), 3.6, 'sine', 0.035, 1.4); // 5度上
+  }
+  // pluck (昼は密、夜はまばら)
+  const density = dayness > 0.5 ? 0.55 : 0.3;
+  if (Math.random() < density) {
+    const deg = PENTA[Math.floor(Math.random() * PENTA.length)];
+    const oct = Math.random() < 0.4 ? 12 : 0;
+    const type = dayness > 0.5 ? 'triangle' : 'sine';
+    tone(time + 0.02, midiToFreq(deg + oct, root), dayness > 0.5 ? 0.5 : 1.0, type, 0.06, 0.02);
+  }
+  beatIndex++;
+}
+
+// 効果音発生時に BGM を一瞬下げる (ダッキング)
+function duckMusic() {
+  if (!musicBus) return;
+  const t = ctx.currentTime;
+  const base = volumes.music;
+  musicBus.gain.cancelScheduledValues(t);
+  musicBus.gain.setValueAtTime(Math.max(0.0001, musicBus.gain.value), t);
+  musicBus.gain.exponentialRampToValueAtTime(Math.max(0.0001, base * 0.4), t + 0.05);
+  musicBus.gain.exponentialRampToValueAtTime(Math.max(0.0001, base), t + 0.5);
+}
+
+export function updateMusic(dt, timeOfDay) {
+  if (!ensureAudio() || !musicBus) return;
+  const sy = Math.sin((timeOfDay - 0.25) * Math.PI * 2);
+  const dayness = smoothstep(-0.08, 0.18, sy);
+  if (nextNoteTime < ctx.currentTime) nextNoteTime = ctx.currentTime + 0.1;
+  // 0.25秒先まで予約 (フレーム落ちしても途切れない)
+  while (nextNoteTime < ctx.currentTime + 0.25) {
+    scheduleBeat(nextNoteTime, dayness);
+    nextNoteTime += BEAT;
   }
 }

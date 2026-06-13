@@ -21,6 +21,8 @@ const queuedKeys = new Set();
 const collectedCrystals = new Set(); // "cx,cz,i" 取得済みクリスタル
 
 let water = null;
+let waterGeo = null;
+let mountains = null;
 let elapsed = 0;
 
 // ---------- 高さ関数 (地形の唯一の真実) ----------
@@ -38,6 +40,7 @@ const GEO = {
   rock: new THREE.DodecahedronGeometry(0.7, 0),
   flower: new THREE.SphereGeometry(0.1, 5, 4),
   crystal: new THREE.OctahedronGeometry(0.42),
+  pillar: new THREE.CylinderGeometry(0.5, 0.8, 34, 8),
 };
 
 // 風揺れ用の共有時間 uniform (updateWorld が毎フレーム更新)
@@ -86,6 +89,10 @@ const MAT = {
     color: 0x2f7fae, transparent: true, opacity: 0.72,
     roughness: 0.25, metalness: 0.15,
   }),
+  pillar: new THREE.MeshStandardMaterial({
+    color: 0xaef0ff, emissive: 0x6fe0ff, emissiveIntensity: 1.8,
+    transparent: true, opacity: 0.5, fog: false,
+  }),
 };
 applyWind(MAT.pine, 0.18);
 applyWind(MAT.leaf, 0.22);
@@ -109,12 +116,33 @@ const _c = new THREE.Color();
 
 // ---------- 初期化 ----------
 export function initWorld(px, pz) {
-  // 水面 (1枚をプレイヤーに追従させる)
+  // 水面 (1枚をプレイヤーに追従させる。頂点を揺らして波を作る)
   const wsize = (R * 2 + 4) * SIZE;
-  water = new THREE.Mesh(new THREE.PlaneGeometry(wsize, wsize), MAT.water);
+  waterGeo = new THREE.PlaneGeometry(wsize, wsize, 48, 48);
+  waterGeo.attributes.position.setUsage(THREE.DynamicDrawUsage);
+  water = new THREE.Mesh(waterGeo, MAT.water);
   water.rotation.x = -Math.PI / 2;
   water.position.y = CONFIG.WATER_LEVEL;
   scene.add(water);
+
+  // 遠景の山リング (霧に溶けるスカイライン。プレイヤー追従)
+  const ringGeo = new THREE.CylinderGeometry(200, 220, 70, 80, 1, true);
+  const rpos = ringGeo.attributes.position;
+  for (let i = 0; i < rpos.count; i++) {
+    if (rpos.getY(i) > 0) {
+      // 上端をギザギザにして山の稜線に
+      const ang = Math.atan2(rpos.getZ(i), rpos.getX(i));
+      const n = fbm((ang + 4) * 1.6, 0.5, 3, 2.0, 0.5, 99) ;
+      rpos.setY(i, rpos.getY(i) + n * 46 - 8);
+    }
+  }
+  ringGeo.computeVertexNormals();
+  mountains = new THREE.Mesh(
+    ringGeo,
+    new THREE.MeshStandardMaterial({ color: 0x6a7f96, roughness: 1, flatShading: true, side: THREE.BackSide })
+  );
+  mountains.position.y = 6;
+  scene.add(mountains);
 
   // スポーン周辺 3×3 は同期生成 (最初の景色が空にならないように)
   const cx = Math.floor(px / SIZE), cz = Math.floor(pz / SIZE);
@@ -313,6 +341,18 @@ function buildChunk(cx, cz) {
     crystals.push({ mesh, key: ckey, baseY, phase: hash2(i, cx + cz * 3, seed + 97) * Math.PI * 2 });
   }
 
+  // --- 光の柱 (まれに出る遠景ランドマーク。bloom で光って探索を誘う) ---
+  if (hash2(cx * 7, cz * 13, seed + 211) < 0.1) {
+    const wx = cx * SIZE + (0.3 + hash2(cx, cz, seed + 213) * 0.4) * SIZE;
+    const wz = cz * SIZE + (0.3 + hash2(cz, cx, seed + 217) * 0.4) * SIZE;
+    const h = heightAt(wx, wz);
+    if (h > CONFIG.WATER_LEVEL) {
+      const pillar = new THREE.Mesh(GEO.pillar, MAT.pillar);
+      pillar.position.set(wx, h + 16, wz); // 地面から空へ伸びる
+      group.add(pillar);
+    }
+  }
+
   scene.add(group);
   chunks.set(key, { group, uniqueGeos, ims, crystals });
 }
@@ -324,6 +364,23 @@ function disposeChunk(key) {
   for (const g of chunk.uniqueGeos) g.dispose();
   for (const im of chunk.ims) im.dispose(); // instanceMatrix 等のバッファ解放 (共有 geo は保持)
   chunks.delete(key);
+}
+
+// ---------- 目標トラッカー用: 最寄りの未取得クリスタル ----------
+//   戻り値: { angle, dist } (angle は atan2(dx,dz)) / 無ければ null
+export function nearestCrystal(playerPos) {
+  let best = null, bestD2 = Infinity;
+  for (const chunk of chunks.values()) {
+    for (const cr of chunk.crystals) {
+      if (!cr.mesh.parent) continue;
+      const dx = cr.mesh.position.x - playerPos.x;
+      const dz = cr.mesh.position.z - playerPos.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < bestD2) { bestD2 = d2; best = { dx, dz }; }
+    }
+  }
+  if (!best) return null;
+  return { angle: Math.atan2(best.dx, best.dz), dist: Math.sqrt(bestD2) };
 }
 
 // ---------- セーブ用: 取得済みクリスタルの読み書き ----------
@@ -386,11 +443,26 @@ export function updateWorld(dt, playerPos) {
     built++;
   }
 
-  // 水面はプレイヤーに追従
+  // 水面はプレイヤーに追従しつつ頂点で波を作る (波はワールド固定)
   if (water) {
     water.position.x = playerPos.x;
     water.position.z = playerPos.z;
-    water.position.y = CONFIG.WATER_LEVEL + Math.sin(elapsed * 0.8) * 0.06;
+    water.position.y = CONFIG.WATER_LEVEL;
+    const wp = waterGeo.attributes.position;
+    for (let i = 0; i < wp.count; i++) {
+      const wx = wp.getX(i) + playerPos.x;
+      const wz = -wp.getY(i) + playerPos.z; // 回転前の local y は世界 -z に対応
+      wp.setZ(i,
+        Math.sin(wx * 0.18 + elapsed * 1.1) * 0.18 +
+        Math.cos(wz * 0.22 - elapsed * 0.8) * 0.12
+      );
+    }
+    wp.needsUpdate = true;
+  }
+  // 遠景の山もプレイヤー追従 (常に地平線にある)
+  if (mountains) {
+    mountains.position.x = playerPos.x;
+    mountains.position.z = playerPos.z;
   }
 
   // クリスタルのアニメ + 吸い寄せ + 取得判定

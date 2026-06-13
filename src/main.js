@@ -10,7 +10,7 @@ import { setupInput } from './input.js';
 import { setupSky, updateSky } from './sky.js';
 import { setupCreatures, updateCreatures } from './creatures.js';
 import { setupHUD, updateHUD, showPickupPopup, showBanner, setupPause } from './hud.js';
-import { playPickup, updateAmbience } from './audio.js';
+import { playPickup, updateAmbience, updateMusic } from './audio.js';
 import { CONFIG } from './config.js';
 import { save } from './save.js';
 import { loadSettings, applySettings } from './settings.js';
@@ -83,6 +83,7 @@ function frame(now) {
     }
     updateCreatures(dt, state.player.pos);
     updateAmbience(dt, state.timeOfDay);
+    updateMusic(dt, state.timeOfDay);
     updateHUD();
 
     // 自動セーブ (数秒ごと)

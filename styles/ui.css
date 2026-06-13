@@ -38,6 +38,51 @@
   color: #fff;
 }
 
+/* 目標トラッカー (最寄りクリスタルへの矢印) */
+#objective {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(10, 20, 40, 0.5);
+  border: 1px solid rgba(174, 240, 255, 0.4);
+  border-radius: 999px;
+  padding: 4px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #aef0ff;
+}
+
+#objective.hidden { display: none; }
+#objArrow { display: inline-block; transition: transform 0.1s linear; }
+
+/* スタミナバー */
+#staminaWrap {
+  position: absolute;
+  bottom: 34px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 180px;
+  height: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 999px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+#staminaWrap.show { opacity: 1; }
+
+#staminaBar {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #5fc7e8, #aef0ff);
+  border-radius: 999px;
+}
+
 #hint {
   position: absolute;
   bottom: 10px;

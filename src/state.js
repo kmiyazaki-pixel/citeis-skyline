@@ -24,6 +24,7 @@ export const state = {
     pitch: 0.35,   // カメラの俯角
     avatarYaw: 0,  // アバターの向き (移動方向へ補間)
     onGround: false,
+    stamina: 100,  // ダッシュ用スタミナ
   },
 
   // input.js が書き、player.js が読む
