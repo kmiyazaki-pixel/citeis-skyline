@@ -58,7 +58,7 @@ export function setupEngine(canvas) {
 
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0xaee3f5);
-  scene.fog = new THREE.Fog(0xaee3f5, 70, 230);
+  scene.fog = new THREE.Fog(0xaee3f5, 55, 190);
 
   camera = new THREE.PerspectiveCamera(60, 1, 0.1, 900);
   camera.position.set(0, 20, 20);
@@ -94,9 +94,9 @@ export function setupEngine(canvas) {
   composer.addPass(new RenderPass(scene, camera));
   bloomPass = new UnrealBloomPass(
     new THREE.Vector2(1, 1),
-    isMobile ? 0.45 : 0.6, // strength
-    0.5,                   // radius
-    0.82                   // threshold (これ以上明るい所だけ滲む)
+    isMobile ? 0.25 : 0.38, // strength (控えめにして夜の滲みを抑制)
+    0.5,                    // radius
+    0.85                    // threshold (これ以上明るい所だけ滲む)
   );
   composer.addPass(bloomPass);
   composer.addPass(new OutputPass()); // トーンマップ + 色空間変換

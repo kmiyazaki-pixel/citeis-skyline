@@ -6,8 +6,8 @@ export const CONFIG = {
   // ワールド (チャンク式ロード)
   WORLD: {
     CHUNK_SIZE: 48,                // 1チャンクの一辺 (ワールド単位)
-    CHUNK_SEGMENTS: 80,            // 地形メッシュの分割数 (高いほど滑らか。草撤去分を回した)
-    CHUNK_SEGMENTS_MOBILE: 48,     // モバイルは控えめ
+    CHUNK_SEGMENTS: 52,            // 地形メッシュの分割数 (拠点機能の容量確保で控えめに)
+    CHUNK_SEGMENTS_MOBILE: 32,     // モバイルは控えめ
     VIEW_RADIUS: 2,                // プレイヤー周囲に読み込む半径 (2 → 5×5)
     MAX_CHUNK_BUILDS_PER_FRAME: 2, // 1フレームに生成するチャンク数の上限
   },

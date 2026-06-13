@@ -97,8 +97,8 @@ const MAT = {
       uDeep: { value: new THREE.Color(0x123f5e) },
       uShallow: { value: new THREE.Color(0x3f93b0) },
       uFogColor: { value: new THREE.Color(0xaee3f5) },
-      uFogNear: { value: 70 },
-      uFogFar: { value: 230 },
+      uFogNear: { value: 55 },
+      uFogFar: { value: 190 },
     },
     vertexShader: `
       uniform float uTime;

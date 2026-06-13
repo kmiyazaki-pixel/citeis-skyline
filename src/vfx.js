@@ -11,14 +11,14 @@ import { state } from './state.js';
 let fireflies = null;
 const uniforms = {
   uTime: { value: 0 },
-  uSize: { value: 18 },
-  uColor: { value: new THREE.Color(0xffe9a0) },
+  uSize: { value: 8 },
+  uColor: { value: new THREE.Color(0xcde08a) }, // 落ち着いた黄緑 (暖色の霧化を防ぐ)
   uOpacity: { value: 0 },
   uDrift: { value: reducedMotion ? 0.4 : 1.0 },
 };
 
 export function setupVfx() {
-  const count = isMobile ? 70 : 180;
+  const count = isMobile ? 24 : 50; // 少数の控えめなホタル
   const pos = new Float32Array(count * 3);
   const phase = new Float32Array(count);
   for (let i = 0; i < count; i++) {
@@ -73,8 +73,8 @@ export function updateVfx(dt, playerPos) {
   if (!fireflies) return;
   uniforms.uTime.value += dt;
   fireflies.position.set(playerPos.x, playerPos.y, playerPos.z);
-  // 夜に出現 (昼は消える)
+  // 夜に出現 (昼は消える)。控えめにして霧化を防ぐ
   const night = 1 - state.sky.dayness;
-  uniforms.uOpacity.value = Math.max(0, night - 0.25) * 1.3;
+  uniforms.uOpacity.value = Math.max(0, night - 0.35) * 0.4;
   fireflies.visible = uniforms.uOpacity.value > 0.01;
 }
